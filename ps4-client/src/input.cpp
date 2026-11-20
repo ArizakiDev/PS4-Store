@@ -40,6 +40,7 @@ bool Input::init() {
     int user = 0;
     rc = sceUserServiceGetInitialUser(&user);
     platform::bootLogf("input: GetInitialUser rc=0x%08X user=%d", (unsigned)rc, user);
+    user_ = user;
     if (rc < 0) return false;
     rc = scePadInit();
     platform::bootLogf("input: scePadInit rc=0x%08X", (unsigned)rc);

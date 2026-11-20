@@ -9,9 +9,11 @@ public:
 
     bool pressed(Btn b) const { return pressed_[b]; }
     bool held(Btn b) const { return down_[b]; }
+    int userId() const { return user_; }
 
 private:
     int handle_ = -1;
+    int user_ = 0;
     bool down_[B_COUNT] = {};
     bool prev_[B_COUNT] = {};
     bool pressed_[B_COUNT] = {};

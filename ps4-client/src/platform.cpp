@@ -23,6 +23,7 @@
 #include <unistd.h>
 
 #include <orbis/Sysmodule.h>
+#include <orbis/CommonDialog.h>
 
 #if defined(__has_include)
 #  if __has_include("../external/libjbc/jbc.h")
@@ -190,6 +191,59 @@ std::string systemLanguage() {
     return "en";
 }
 
+static intptr_t rawSyscall3(intptr_t num, intptr_t a1, intptr_t a2, intptr_t a3) {
+#if defined(__x86_64__)
+    intptr_t ret;
+    __asm__ volatile(
+        "syscall\n\t"
+        "jnb 1f\n\t"
+        "movq $-1, %%rax\n"
+        "1:"
+        : "=a"(ret)
+        : "a"(num), "D"(a1), "S"(a2), "d"(a3)
+        : "rcx", "r11", "memory", "cc");
+    return ret;
+#else
+    (void)num; (void)a1; (void)a2; (void)a3;
+    return -1;
+#endif
+}
+
+static bool queryAllMounts(uint64_t& freeBytes, uint64_t& totalBytes) {
+    constexpr size_t kEntry = 472;
+    static unsigned char buf[kEntry * 48];
+    std::memset(buf, 0, sizeof buf);
+    const intptr_t n = rawSyscall3(395, (intptr_t)buf, (intptr_t)sizeof buf, 2);
+    bootLogf("disque: getfsstat n=%ld", (long)n);
+    if (n <= 0 || n > 48) return false;
+    uint64_t bestTotal = 0, bestFree = 0;
+    std::string bestName;
+    for (intptr_t i = 0; i < n; ++i) {
+        const unsigned char* e = buf + i * kEntry;
+        uint64_t bsize, blocks, bfree;
+        int64_t bavail;
+        std::memcpy(&bsize, e + 16, 8);
+        std::memcpy(&blocks, e + 32, 8);
+        std::memcpy(&bfree, e + 40, 8);
+        std::memcpy(&bavail, e + 48, 8);
+        const char* on = reinterpret_cast<const char*>(e + 384);
+        const char* from = reinterpret_cast<const char*>(e + 296);
+        const std::string name(on, strnlen(on, 87));
+        const uint64_t total = blocks * bsize;
+        bootLogf("disque: montage %s (%s) bloc=%llu total=%llu Mo libre=%lld Mo", name.c_str(), std::string(from, strnlen(from, 87)).c_str(),
+                 (unsigned long long)bsize, (unsigned long long)(total >> 20), (long long)((bavail > 0 ? (uint64_t)bavail * bsize : 0) >> 20));
+        if (bsize < 512 || bsize > (1u << 22) || blocks == 0 || bfree > blocks) continue;
+        if (name.compare(0, 5, "/mnt/") == 0 || name.compare(0, 4, "/dev") == 0) continue;
+        if (total < (1ull << 30)) continue;
+        if (total > bestTotal) { bestTotal = total; bestFree = bavail > 0 ? (uint64_t)bavail * bsize : 0; bestName = name; }
+    }
+    if (!bestTotal) return false;
+    bootLogf("disque: retenu %s", bestName.c_str());
+    freeBytes = bestFree;
+    totalBytes = bestTotal;
+    return true;
+}
+
 static bool queryMount(const char* m, uint64_t& freeBytes, uint64_t& totalBytes) {
     struct statfs st;
     std::memset(&st, 0, sizeof st);
@@ -207,9 +261,9 @@ static bool queryMount(const char* m, uint64_t& freeBytes, uint64_t& totalBytes)
 
 bool getFreeDiskSpaceBytes(uint64_t& freeBytes, uint64_t* totalBytes) {
     uint64_t freeB = 0, totalB = 0;
-    const char* mounts[] = {"/user", "/user/app", "/data"};
-    bool ok = false;
-    for (const char* m : mounts) if (queryMount(m, freeB, totalB)) { ok = true; break; }
+    const char* mounts[] = {"/user", "/user/app", "/data", "/system_data", "/"};
+    bool ok = queryAllMounts(freeB, totalB);
+    if (!ok) for (const char* m : mounts) if (queryMount(m, freeB, totalB)) { ok = true; break; }
     if (!ok) {
         for (const char* m : mounts) {
             struct statvfs sv;
@@ -343,6 +397,16 @@ int loadSystemModules() {
         if (rc < 0) ++failed;
     }
     return failed;
+}
+
+bool initImeDialog() {
+    int rc = (int)sceSysmoduleLoadModuleInternal((OrbisSysModuleInternal)ORBIS_SYSMODULE_INTERNAL_COMMON_DIALOG);
+    bootLogf("ime: CommonDialog module rc=0x%08X", (unsigned)rc);
+    int rc2 = (int)sceSysmoduleLoadModule(ORBIS_SYSMODULE_IME_DIALOG);
+    bootLogf("ime: ImeDialog module rc=0x%08X", (unsigned)rc2);
+    int rc3 = (int)sceCommonDialogInitialize();
+    bootLogf("ime: sceCommonDialogInitialize rc=0x%08X", (unsigned)rc3);
+    return rc2 >= 0;
 }
 
 bool loadModule(const char* path) {

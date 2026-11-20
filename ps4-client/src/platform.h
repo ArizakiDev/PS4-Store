@@ -26,6 +26,7 @@ void setCrashHook(void (*hook)());
 void logCaught(const char* where);
 
 int loadSystemModules();
+bool initImeDialog();
 
 const std::string& lastError();
 void setLastError(const std::string& msg);

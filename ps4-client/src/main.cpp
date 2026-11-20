@@ -232,6 +232,14 @@ int main(int, char**) {
         remoteSync.start();
         Ui ui(renderer, text, images, catalog, downloader, input, dnsGuard, installedMgr, updater, pluginMgr, payloadSender, remoteSync);
         ui.initSettings(cfg);
+        {
+            std::string target;
+            if (SelfUpdater::consumeApplyMarker(target)) {
+                platform::bootLogf("mise a jour: cible=%s installee=%s", target.c_str(), APP_VERSION);
+                if (target == APP_VERSION) ui.announce(true, i18n::tr("ps4.upd.done", {{"v", target}}));
+                else ui.warn(i18n::tr("ps4.upd.failed", {{"v", target}}));
+            }
+        }
         installedMgr.setLaunchedHook([&](const std::string& titleId, const std::string& name) { remoteSync.reportLaunch(titleId, name); });
         installedMgr.setLaunchHooks([&] { dnsGuard.stop(); },
                                     [&] { if (jailbroken && netOk) dnsGuard.start(); });
@@ -277,7 +285,7 @@ int main(int, char**) {
 
         while (running) {
             SDL_Event e;
-            while (SDL_PollEvent(&e)) if (e.type == SDL_QUIT) { std::string perr; if (updater.state() == SelfUpdater::State::Ready && updater.canApply(perr)) gLaunchUpdater = true; running = false; }
+            while (SDL_PollEvent(&e)) if (e.type == SDL_QUIT) { std::string perr; if (updater.state() == SelfUpdater::State::Ready && updater.canApply(perr)) { updater.markApplying(); gLaunchUpdater = true; } running = false; }
 
             for (int i = 0; i < 16; ++i) {
                 platform::SystemEvent ev = platform::pollSystemEvent();
@@ -326,7 +334,7 @@ int main(int, char**) {
                 auto t0 = Clock::now();
                 input.update((float)dt);
                 ui.update((float)dt);
-                if (ui.applyRequested()) { gLaunchUpdater = true; running = false; }
+                if (ui.applyRequested()) { updater.markApplying(); gLaunchUpdater = true; running = false; }
                 auto t1 = Clock::now();
                 ui.render();
                 if (surfaceMode) SDL_UpdateWindowSurface(window);

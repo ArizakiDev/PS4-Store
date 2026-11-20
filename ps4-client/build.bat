@@ -8,7 +8,7 @@ if not defined DOTNET_ROLL_FORWARD set "DOTNET_ROLL_FORWARD=Major"
 set "TITLE_ID=PSTR00001"
 set "CONTENT_ID=IV0000-PSTR00001_00-PS4STORE00000000"
 set "APP_NAME=PS4Store"
-set "APP_VERSION=01.40"
+set "APP_VERSION=01.47"
 set "SYSTEM_VER=84213760"
 if not defined EXTRA_LIBS set "EXTRA_LIBS="
 echo %APP_VERSION%| findstr /r /b /e "[0-9][0-9]\.[0-9][0-9]" >nul || ( echo [ERREUR] APP_VERSION "%APP_VERSION%" invalide : format XX.YY attendu ^(ex. 01.31^). & goto :fail )
@@ -76,7 +76,7 @@ echo === 2/5 Edition de liens ===
 ld.lld -m elf_x86_64 -pie --script "%TC%\link.x" --eh-frame-hdr -o "%OUT%\eboot.elf" ^
   !OBJS! -L"%TC%\lib" ^
   -lc -lkernel -lc++ -lSDL2 -lSceUserService -lScePad -lSceNet -lSceSsl -lSceHttp ^
-  -lSceSystemService -lSceAppInstUtil -lSceBgft -lSceVideoOut -lSceAudioOut -lSceSysmodule %EXTRA_LIBS% ^
+  -lSceSystemService -lSceAppInstUtil -lSceBgft -lSceVideoOut -lSceAudioOut -lSceSysmodule -lSceImeDialog -lSceCommonDialog %EXTRA_LIBS% ^
   "%TC%\lib\crt1.o"
 if errorlevel 1 goto :fail
 

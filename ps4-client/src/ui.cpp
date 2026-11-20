@@ -7,6 +7,9 @@
 #include "i18n.h"
 #include "http.h"
 #include "platform.h"
+#include "stb_image.h"
+
+#include <orbis/ImeDialog.h>
 
 #include <algorithm>
 #include <cmath>
@@ -29,7 +32,6 @@ const SDL_Color kBtnSquare{244, 114, 182, 255};
 const SDL_Color kWhite{255, 255, 255, 255};
 const SDL_Color kHeart{255, 82, 108, 255};
 const SDL_Color kGreen{48, 209, 88, 255};
-const SDL_Color kGold{255, 196, 45, 255};
 const SDL_Color kOrange{255, 159, 10, 255};
 
 const char* kPairAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -55,6 +57,7 @@ Ui::~Ui() {
     for (auto& kv : ringTextures_) SDL_DestroyTexture(kv.second);
     for (auto& kv : iconTextures_) SDL_DestroyTexture(kv.second);
     if (gloss_) SDL_DestroyTexture(gloss_);
+    if (logoTex_) SDL_DestroyTexture(logoTex_);
 }
 
 
@@ -165,15 +168,14 @@ void Ui::ringRound(float x, float y, float w, float h, float rad, SDL_Color c, f
 }
 
 void Ui::glassPanel(float x, float y, float w, float h, float rad, bool opaque) {
-    fillRound(x, y, w, h, rad, kSurface, (!opaque && quality_ >= 2) ? 0.92f : 1.f);
-    ringRound(x, y, w, h, rad, kBorder, 1.f);
+    (void)opaque;
+    fillRound(x, y, w, h, std::min(rad, 12.f), kSurface, 1.f);
 }
 
 void Ui::panelOpaque(float x, float y, float w, float h, float rad) { glassPanel(x, y, w, h, rad); }
 
 void Ui::panel(float x, float y, float w, float h, float rad, float alpha) {
-    fillRound(x, y, w, h, rad, kSurface, 0.92f * alpha);
-    ringRound(x, y, w, h, rad, kBorder, 0.85f * alpha);
+    fillRound(x, y, w, h, std::min(rad, 12.f), kSurface, 0.94f * alpha);
 }
 
 
@@ -232,11 +234,7 @@ SDL_Texture* Ui::iconTex(PsBtn b, int size) {
                     auto layer = [&](float lr, float lg, float lb, float la) {
                         r = lr * la + r * (1 - la); g = lg * la + g * (1 - la); bl = lb * la + bl * (1 - la); a = la + a * (1 - la);
                     };
-                    if (dist <= R) {
-                        layer(10, 22, 52, 0.92f);
-                        if (dist >= R - 1.6f) layer(col.r, col.g, col.b, 0.55f);
-                        if (symbolHit(b, fx, fy, (float)N)) layer(col.r, col.g, col.b, 1.f);
-                    }
+                    if (dist <= R && symbolHit(b, fx, fy, (float)N)) layer(col.r, col.g, col.b, 1.f);
                     pr += r; pg += g; pb += bl; pa += a;
                 }
             unsigned char* o = &px[((size_t)y * N + x) * 4];
@@ -255,6 +253,7 @@ float Ui::psIconWidth(PsBtn b, int size) {
         case PsBtn::L1: return text_.width("L1", 17) + 26.f;
         case PsBtn::R1: return text_.width("R1", 17) + 26.f;
         case PsBtn::Options: return text_.width("OPTIONS", 15) + 26.f;
+        case PsBtn::Touchpad: return size * 1.6f;
         default: return (float)size;
     }
 }
@@ -263,11 +262,15 @@ float Ui::drawPsButtonIcon(PsBtn b, float x, float y, int size, float alpha) {
     const float w = psIconWidth(b, size);
     if (b == PsBtn::L1 || b == PsBtn::R1 || b == PsBtn::Options) {
         const float h = size * 0.82f, py = y + (size - h) / 2.f;
-        fillRound(x, py, w, h, h / 2, SDL_Color{82, 92, 116, 255}, alpha);
-        fillRound(x + 1.5f, py + 1.5f, w - 3.f, h - 3.f, h / 2 - 1.5f, SDL_Color{150, 160, 182, 255}, alpha);
-        fillRound(x + 3.f, py + 2.5f, w - 6.f, (h - 5.f) / 2.f, (h - 5.f) / 4.f, SDL_Color{196, 205, 224, 255}, 0.55f * alpha);
+        fillRound(x, py, w, h, h * 0.3f, SDL_Color{208, 214, 226, 255}, alpha);
         const char* label = b == PsBtn::L1 ? "L1" : b == PsBtn::R1 ? "R1" : "OPTIONS";
         text_.draw(label, b == PsBtn::Options ? 15 : 17, x + w / 2, py + (b == PsBtn::Options ? 5.f : 4.f), SDL_Color{12, 22, 48, 255}, alpha, TextRenderer::Center);
+        return w;
+    }
+    if (b == PsBtn::Touchpad) {
+        const float h = size * 0.78f, py = y + (size - h) / 2.f;
+        fillRound(x, py, w, h, h * 0.26f, SDL_Color{208, 214, 226, 255}, alpha);
+        fillRound(x + w * 0.26f, py + h * 0.62f, w * 0.48f, h * 0.1f, h * 0.05f, SDL_Color{20, 24, 34, 255}, alpha);
         return w;
     }
     if (SDL_Texture* t = iconTex(b, size)) {
@@ -279,15 +282,10 @@ float Ui::drawPsButtonIcon(PsBtn b, float x, float y, int size, float alpha) {
 }
 
 void Ui::drawButton(float x, float y, float w, float h, PsBtn icon, const std::string& label, bool primary) {
-    if (primary) {
-        const float pulse = 0.5f + 0.5f * std::sin(time_ * 3.2f);
-        fillRound(x - 7.f, y - 7.f, w + 14.f, h + 14.f, h / 2 + 7.f, kCyan, 0.08f + 0.08f * pulse);
-        fillRound(x - 3.f, y - 3.f, w + 6.f, h + 6.f, h / 2 + 3.f, kCyan, 0.20f + 0.16f * pulse);
-        fillRound(x, y, w, h, h / 2, kAccent, 1.f);
-        fillRound(x + 3.f, y + 3.f, w - 6.f, h / 2 - 3.f, (h / 2 - 3.f) / 2, kWhite, 0.12f);
-    } else {
-        fillRound(x, y, w, h, h / 2, kBorder, 0.60f);
-        fillRound(x + 1.5f, y + 1.5f, w - 3.f, h - 3.f, h / 2 - 1.5f, kSurface, 0.97f);
+    if (primary) fillRound(x, y, w, h, 8.f, kAccent, 1.f);
+    else {
+        fillRound(x, y, w, h, 8.f, kBorder, 0.5f);
+        fillRound(x + 1.5f, y + 1.5f, w - 3.f, h - 3.f, 6.5f, kSurface, 1.f);
     }
     const int is = 30;
     const float iw = psIconWidth(icon, is), tw = (float)text_.width(label, 22);
@@ -533,6 +531,18 @@ void Ui::rebuildFilter(const std::string& keepId) {
                                 : true;
         if (ok && matchesQuery(games_[i])) filtered_.push_back(i);
     }
+    {
+        const TabKind kd = tabKind(tab_);
+        if (cfg_.sort != 0 && (kd == K_ALL || kd == K_INSTALLED || kd == K_LIBRARY)) {
+            std::stable_sort(filtered_.begin(), filtered_.end(), [this](int a, int b) {
+                const Game& x = games_[a];
+                const Game& y = games_[b];
+                if (cfg_.sort == 1) return foldKey(x.titre) < foldKey(y.titre);
+                if (cfg_.sort == 2) return x.updated_at > y.updated_at;
+                return x.likes > y.likes;
+            });
+        }
+    }
     if (tabKind(tab_) == K_NEW) {
         std::stable_sort(filtered_.begin(), filtered_.end(), [this](int a, int b) { return games_[a].updated_at > games_[b].updated_at; });
         if (filtered_.size() > 24) filtered_.resize(24);
@@ -581,6 +591,8 @@ void Ui::ensureVisible() {
 }
 
 void Ui::update(float dt) {
+    updPoll_ += dt;
+    if (updPoll_ >= 60.f) { updPoll_ = 0.f; upd_.check(false); }
     time_ += dt;
     bg_.update(dt);
 
@@ -600,7 +612,7 @@ void Ui::update(float dt) {
     if (!tabsMeasured_) {
         float total = 0.f, gap = 6.f;
         const int nTabs = tabCount();
-        for (int i = 0; i < nTabs; ++i) { tabW_[i] = text_.width(tabLabel(i), 24) + 44.f + (tabKind(i) == K_FEATURED ? 22.f : 0.f); total += tabW_[i] + (i ? gap : 0); }
+        for (int i = 0; i < nTabs; ++i) { tabW_[i] = text_.width(tabLabel(i), 24) + 44.f + 0.f; total += tabW_[i] + (i ? gap : 0); }
         float x = W - 96.f - total;
         for (int i = 0; i < nTabs; ++i) { tabX_[i] = x; x += tabW_[i] + gap; }
         pillX_.snap(tabX_[tab_]);
@@ -627,7 +639,9 @@ void Ui::update(float dt) {
 
     bool modalDl = dl_.phase() == Downloader::Phase::Preparing;
 
-    if (!alerts_.empty()) {
+    if (imeActive_) {
+        pollIme();
+    } else if (!alerts_.empty()) {
         if (in_.pressed(B_CROSS) || in_.pressed(B_CIRCLE)) alerts_.erase(alerts_.begin());
     } else if (modalDl) {
         if (in_.pressed(B_CIRCLE)) dl_.cancel();
@@ -635,6 +649,7 @@ void Ui::update(float dt) {
         const bool working = remote_.pairState() == RemoteSync::PairState::Working;
         if (in_.pressed(B_CIRCLE) && !working) { pairOpen_ = false; pairWaiting_ = false; }
         else if (!working) {
+            if (in_.pressed(B_TRIANGLE)) startIme(1);
             if (in_.pressed(B_LEFT) && pairCursor_ % 8 > 0) --pairCursor_;
             if (in_.pressed(B_RIGHT) && pairCursor_ % 8 < 7) ++pairCursor_;
             if (in_.pressed(B_UP) && pairCursor_ >= 8) pairCursor_ -= 8;
@@ -673,46 +688,59 @@ void Ui::update(float dt) {
     } else if (modal_ == Modal::Force) {
         if (in_.pressed(B_CIRCLE)) modal_ = Modal::None;
         else if (in_.pressed(B_CROSS)) { modal_ = Modal::None; plugins_.install(pending_, plugin::planFor(pending_).supportedMask()); }
-    } else if (settings_) {
-        if (in_.pressed(B_CIRCLE) || in_.pressed(B_OPTIONS)) { settings_ = false; pillX_.set(tabX_[tab_]); pillW_.set(tabW_[tab_]); }
+    } else if (historyOpen_) {
+        const int hn = (int)upd_.history().size();
+        if (in_.pressed(B_CIRCLE) || in_.pressed(B_TRIANGLE) || in_.pressed(B_OPTIONS)) historyOpen_ = false;
         else {
+            if (in_.pressed(B_UP) && histSel_ > 0) --histSel_;
+            if (in_.pressed(B_DOWN) && histSel_ + 1 < hn) ++histSel_;
+        }
+    } else if (settings_) {
+        if (in_.pressed(B_CIRCLE) || in_.pressed(B_OPTIONS) || in_.pressed(B_L1) || in_.pressed(B_R1)) { settings_ = false; pillX_.set(tabX_[tab_]); pillW_.set(tabW_[tab_]); }
+        else {
+            if (in_.pressed(B_TRIANGLE)) { historyOpen_ = true; histSel_ = 0; }
             if (in_.pressed(B_UP) && setRow_ > 0) --setRow_;
-            if (in_.pressed(B_DOWN) && setRow_ < 4) ++setRow_;
-            const int d = (in_.pressed(B_RIGHT) || (in_.pressed(B_CROSS) && setRow_ < 2)) ? 1 : in_.pressed(B_LEFT) ? -1 : 0;
+            if (in_.pressed(B_DOWN) && setRow_ < 5) ++setRow_;
+            const int d = (in_.pressed(B_RIGHT) || (in_.pressed(B_CROSS) && setRow_ < 3)) ? 1 : in_.pressed(B_LEFT) ? -1 : 0;
             if (setRow_ == 0 && d != 0) {
                 const int idx = (i18n::index() + d + i18n::COUNT) % i18n::COUNT;
                 cfg_.lang = i18n::kCodes[idx];
                 applyLanguage();
                 saveSettings();
+            } else if (setRow_ == 2 && d != 0) {
+                cfg_.sort = (cfg_.sort + d + 4) % 4;
+                saveSettings();
+                rebuildFilter();
             } else if (setRow_ == 1 && d != 0) {
                 cfg_.theme = (cfg_.theme + d + settings::THEMES) % settings::THEMES;
                 applyTheme();
                 saveSettings();
-            } else if (setRow_ == 2 && in_.pressed(B_CROSS) && upd_.state() == SelfUpdater::State::Ready) {
+            } else if (setRow_ == 3 && in_.pressed(B_CROSS) && upd_.state() == SelfUpdater::State::Ready) {
                 std::string perr;
                 if (upd_.canApply(perr)) { applyRequested_ = true; notify(true, i18n::tr("ps4.upd.applying"), 8.f); }
                 else { platform::bootLogf("auto-update: %s", perr.c_str()); alerts_.push_back(i18n::tr("ps4.upd.apply_fail")); }
-            } else if (setRow_ == 2 && in_.pressed(B_CROSS)) {
+            } else if (setRow_ == 3 && in_.pressed(B_CROSS)) {
                 manualCheck_ = true;
                 upd_.check(true);
                 notify(true, i18n::tr("ps4.set.checking"), 2.5f);
-            } else if (setRow_ == 3 && in_.pressed(B_CROSS)) {
+            } else if (setRow_ == 4 && in_.pressed(B_CROSS)) {
                 images_.clearAll();
                 const int n = platform::clearDirectory(config::CACHE_DIR);
                 requested_ = false;
                 catalog_.refresh();
                 notify(true, i18n::tr("ps4.set.cache_cleared", {{"n", std::to_string(n)}}));
-            } else if (setRow_ == 4 && in_.pressed(B_CROSS)) {
+            } else if (setRow_ == 5 && in_.pressed(B_CROSS)) {
                 if (remote_.paired()) {
                     remote_.unlink();
                     cfg_.device_token.clear();
                     cfg_.paired_username.clear();
                     saveSettings();
                     tabsMeasured_ = false;
-                    if (tabKind(tab_) == K_LIBRARY) setTab(0);
+                    if (tabKind(tab_) == K_LIBRARY) setTab(2);
                     notify(true, i18n::tr("ps4.pair.unlinked"));
                 } else {
                     pairOpen_ = true; pairWaiting_ = false; pairCode_.clear(); pairError_.clear(); pairCursor_ = 0;
+                    startIme(1);
                 }
             }
         }
@@ -755,7 +783,7 @@ void Ui::update(float dt) {
             else if (in_.pressed(B_OPTIONS)) startReport(*g);
         }
     } else {
-        if (in_.pressed(B_TOUCHPAD)) { searchOpen_ = true; kbCursor_ = 0; }
+        if (in_.pressed(B_TOUCHPAD)) { if (!startIme()) { searchOpen_ = true; kbCursor_ = 0; } }
         if (in_.pressed(B_CIRCLE) && !query_.empty()) { query_.clear(); sel_ = 0; rebuildFilter(); }
         if (in_.pressed(B_R1)) setTab(tab_ + 1);
         if (in_.pressed(B_L1)) setTab(tab_ - 1);
@@ -867,7 +895,7 @@ void Ui::update(float dt) {
         cfg_.paired_username.clear();
         saveSettings();
         tabsMeasured_ = false;
-        if (tabKind(tab_) == K_LIBRARY) setTab(0);
+        if (tabKind(tab_) == K_LIBRARY) setTab(2);
         alerts_.push_back(i18n::tr("ps4.pair.revoked"));
     }
     {
@@ -1028,6 +1056,7 @@ void Ui::render() {
     drawPreparing();
     drawRelated();
     drawSettings();
+    drawHistory();
     drawPair();
     drawSearch();
     drawRegionModal();
@@ -1039,52 +1068,55 @@ void Ui::render() {
     SDL_RenderPresent(r_);
 }
 
+void Ui::ensureLogo() {
+    if (logoTex_) return;
+    static bool tried = false;
+    if (tried) return;
+    tried = true;
+    std::vector<unsigned char> raw;
+    if (!TextRenderer::readFile("/app0/sce_sys/icon0.png", raw) && !TextRenderer::readFile("sce_sys/icon0.png", raw)) return;
+    int w = 0, h = 0, comp = 0;
+    unsigned char* px = stbi_load_from_memory(raw.data(), (int)raw.size(), &w, &h, &comp, 4);
+    if (!px) return;
+    logoTex_ = gfx::makeTexture(r_, px, w, h);
+    stbi_image_free(px);
+}
+
 void Ui::drawHeader() {
     SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(r_, kBar.r, kBar.g, kBar.b, quality_ >= 1 ? 120 : 175);
+    SDL_SetRenderDrawColor(r_, kBar.r, kBar.g, kBar.b, quality_ >= 1 ? 150 : 200);
     SDL_Rect band{0, 0, W, 176};
     SDL_RenderFillRect(r_, &band);
-    SDL_SetRenderDrawColor(r_, kBorder.r, kBorder.g, kBorder.b, 110);
+    SDL_SetRenderDrawColor(r_, kBorder.r, kBorder.g, kBorder.b, 90);
     SDL_Rect line{0, 175, W, 1};
     SDL_RenderFillRect(r_, &line);
 
-    const float lx = 96.f, ly = 60.f, ls = 64.f;
-    fillRound(lx - 3.f, ly - 3.f, ls + 6.f, ls + 6.f, 20.f, kCyan, 0.18f);
-    fillRound(lx, ly, ls, ls, 17.f, kAccent, 1.f);
-    ringRound(lx, ly, ls, ls, 17.f, kCyan, 0.55f);
-    text_.draw("P", 38, lx + ls / 2, ly + 11.f, kWhite, 1.f, TextRenderer::Center);
-
-    const float tx = lx + ls + 22.f;
-    text_.draw("PS4Store", 44, tx, 56.f, kText);
-    const std::string ver = "v" APP_VERSION;
-    const float vx = tx + text_.width("PS4Store", 44) + 16.f, vw = text_.width(ver, 16) + 26.f;
-    fillRound(vx, 70.f, vw, 28.f, 14.f, kSurface, 0.9f);
-    ringRound(vx, 70.f, vw, 28.f, 14.f, kBorder, 0.6f);
-    text_.draw(ver, 16, vx + 13.f, 74.f, kMuted);
-    fillRound(tx + 2.f, 118.f, 10.f, 10.f, 5.f, kCyan, 1.f);
-    std::string sub = std::to_string(filtered_.size()) + " " + i18n::tr(filtered_.size() > 1 ? "ps4.title_other" : "ps4.title_one");
-    if (!query_.empty()) sub += "   \xC2\xB7   " + i18n::tr("ps4.search") + " : " + query_;
-    text_.draw(sub, 20, tx + 22.f, 110.f, query_.empty() ? kMuted : kCyan, 1.f, TextRenderer::Left, 520);
-
-    const float ty = 62.f, th = 56.f;
-    const int nTabs = tabCount();
-    const float barX = tabX_[0] - 7.f, barW = tabX_[nTabs - 1] + tabW_[nTabs - 1] - tabX_[0] + 14.f;
-    fillRound(barX, ty - 7.f, barW, th + 14.f, (th + 14.f) / 2, kSurface, 0.7f);
-    ringRound(barX, ty - 7.f, barW, th + 14.f, (th + 14.f) / 2, kBorder, 0.5f);
-    fillRound(pillX_.value - 4.f, ty - 4.f, pillW_.value + 8.f, th + 8.f, (th + 8.f) / 2, kCyan, 0.2f);
-    fillRound(pillX_.value, ty, pillW_.value, th, th / 2, kAccent, 1.f);
-    ringRound(pillX_.value, ty, pillW_.value, th, th / 2, kCyan, 0.6f);
-    for (int i = 0; i < nTabs; ++i) {
-        const bool active = i == tab_;
-        const std::string lab = tabLabel(i);
-        float cx = tabX_[i] + tabW_[i] / 2;
-        if (tabKind(i) == K_FEATURED) {
-            cx += 11.f;
-            fillRound(cx - text_.width(lab, 24) / 2.f - 20.f, ty + th / 2 - 6.f, 12.f, 12.f, 6.f, kGold, 1.f);
-        }
-        text_.draw(lab, 24, cx, ty + 12.f, active ? kWhite : kBody, 1.f, TextRenderer::Center);
+    ensureLogo();
+    const float lx = 96.f, ly = 52.f, ls = 72.f;
+    if (logoTex_) {
+        SDL_Rect d{(int)lx, (int)ly, (int)ls, (int)ls};
+        SDL_RenderCopy(r_, logoTex_, nullptr, &d);
     }
+    const float tx = lx + ls + 24.f;
+    text_.draw("PS4Store", 40, tx, 50.f, kText);
+    std::string sub = "v" APP_VERSION "   |   " + std::to_string(filtered_.size()) + " " + i18n::tr(filtered_.size() > 1 ? "ps4.title_other" : "ps4.title_one");
+    if (time_ - updAt_ > 2.f) {
+        updAt_ = time_;
+        int n = 0;
+        for (const auto& g : games_) if (stateOf(g) == installed::State::UpdateAvailable) ++n;
+        updCount_ = n;
+    }
+    if (updCount_ > 0) sub += "   |   " + i18n::tr("ps4.updates_n", {{"n", std::to_string(updCount_)}});
+    if (!query_.empty()) sub += "   |   " + i18n::tr("ps4.search") + " : " + query_;
+    text_.draw(sub, 20, tx, 104.f, kMuted, 1.f, TextRenderer::Left, 760);
 
+    const float ty = 70.f;
+    const int nTabs = tabCount();
+    for (int i = 0; i < nTabs; ++i) {
+        const bool active = i == tab_ || (settings_ && tabKind(i) == K_SETTINGS);
+        text_.draw(tabLabel(i), 26, tabX_[i] + tabW_[i] / 2, ty, active ? kWhite : kMuted, 1.f, TextRenderer::Center);
+    }
+    fillRound(pillX_.value + 22.f, ty + 50.f, std::max(10.f, pillW_.value - 44.f), 4.f, 2.f, kWhite, 1.f);
 }
 
 void Ui::drawCover(const Game& g, float x, float y, float size, float alpha) {
@@ -1115,8 +1147,6 @@ void Ui::drawGrid() {
     if (filtered_.empty()) return;
     const float a = gridAlpha_.value;
     const int n = (int)filtered_.size();
-    const float pulse = 0.5f + 0.5f * std::sin(time_ * 3.4f);
-    const SDL_Color shadow{0, 4, 18, 255};
 
     SDL_Rect clip{0, 176, W, 1020 - 176};
     SDL_RenderSetClipRect(r_, &clip);
@@ -1134,24 +1164,11 @@ void Ui::drawGrid() {
         const bool selected = i == sel_ && dl_.phase() == Downloader::Phase::Idle;
 
         if (selected) {
-            fillRound(cxs - 4.f, cys + 18.f, sz + 8.f, sz + 6.f, 26.f, shadow, 0.20f * a);
-            fillRound(cxs + 10.f, cys + 32.f, sz - 20.f, sz - 6.f, 22.f, shadow, 0.28f * a);
-        } else if (quality_ >= 2) {
-            fillRound(x + 8.f, y + 16.f, CARD - 16.f, CARD - 6.f, 20.f, shadow, 0.22f * a);
-        }
-
-        if (selected) {
             const float k = anim::clamp01((s - 1.f) / 0.06f);
-            for (int h = 3; h >= 1; --h) {
-                const float gw = 7.f * h * (0.85f + 0.3f * pulse);
-                fillRound(cxs - gw, cys - gw, sz + 2 * gw, sz + 2 * gw, 20.f * s + gw, kCyan, a * k * (0.05f + 0.06f * pulse) * (1.f + (3 - h) * 0.7f));
-            }
-            const SDL_Color edge{(Uint8)(255 - (int)(209 * pulse * 0.6f)), (Uint8)(255 - (int)(100 * pulse * 0.6f)), 255, 255};
-            fillRound(cxs - 4.f, cys - 4.f, sz + 8.f, sz + 8.f, 20.f * s + 4.f, edge, a * k * (0.78f + 0.22f * pulse));
+            fillRound(cxs - 5.f, cys - 5.f, sz + 10.f, sz + 10.f, 14.f * s + 5.f, kWhite, a * k);
         }
 
         drawCover(g, cxs, cys, sz, a);
-        if (selected || quality_ >= 3) drawGloss(cxs, cys, sz, a);
 
         {
             installed::State st = stateOf(g);
@@ -1214,12 +1231,13 @@ void Ui::drawHints() {
     installed::State sst = sg ? stateOf(*sg) : installed::State::NotInstalled;
     if (!alerts_.empty()) hints = {{{PsBtn::Cross}, i18n::tr("ps4.ok")}};
     else if (pairOpen_) hints = {{{PsBtn::Cross}, i18n::tr("ps4.add")}, {{PsBtn::Square}, i18n::tr("ps4.delete")},
-                                 {{PsBtn::Options}, i18n::tr("ps4.validate")}, {{PsBtn::Circle}, i18n::tr("ps4.cancel")}};
+                                 {{PsBtn::Triangle}, i18n::tr("ps4.keyboard")}, {{PsBtn::Options}, i18n::tr("ps4.validate")}, {{PsBtn::Circle}, i18n::tr("ps4.cancel")}};
     else if (searchOpen_) hints = {{{PsBtn::Cross}, i18n::tr("ps4.search.type")}, {{PsBtn::Square}, i18n::tr("ps4.delete")}, {{PsBtn::Triangle}, i18n::tr("ps4.space")},
                                    {{PsBtn::L1}, i18n::tr("ps4.search.clear_all")}, {{PsBtn::Options}, i18n::tr("ps4.validate")}};
     else if (modal_ == Modal::Region) hints = {{{PsBtn::Cross}, i18n::tr("ps4.confirm")}, {{PsBtn::Circle}, i18n::tr("ps4.cancel")}};
     else if (modal_ == Modal::Force) hints = {{{PsBtn::Cross}, i18n::tr("ps4.plugin.force")}, {{PsBtn::Circle}, i18n::tr("ps4.cancel")}};
-    else if (settings_) hints = {{{PsBtn::Cross}, i18n::tr(setRow_ >= 2 ? "ps4.hint.select" : "ps4.settings.change")}, {{PsBtn::Circle}, i18n::tr("ps4.back")}};
+    else if (historyOpen_) hints = {{{PsBtn::Circle}, i18n::tr("ps4.back")}};
+    else if (settings_) hints = {{{PsBtn::Cross}, i18n::tr(setRow_ >= 3 ? "ps4.hint.select" : "ps4.settings.change")}, {{PsBtn::Triangle}, i18n::tr("ps4.history.short")}, {{PsBtn::L1, PsBtn::R1}, i18n::tr("ps4.tabs")}, {{PsBtn::Circle}, i18n::tr("ps4.back")}};
     else if (relatedOpen_) hints = {{{PsBtn::Cross}, sg && !related_.empty() ? primaryLabel(games_[related_[std::min(relSel_, (int)related_.size() - 1)]], stateOf(games_[related_[std::min(relSel_, (int)related_.size() - 1)]])) : i18n::tr("ps4.install")},
                                     {{PsBtn::Circle}, i18n::tr("ps4.close")}};
     else if (confirmSelfUpdate_) hints = {{{PsBtn::Cross}, i18n::tr("ps4.update")}, {{PsBtn::Circle}, i18n::tr("ps4.later")}};
@@ -1234,7 +1252,7 @@ void Ui::drawHints() {
     } else {
         hints = {{{PsBtn::L1, PsBtn::R1}, i18n::tr("ps4.tabs")}, {{PsBtn::Cross}, i18n::tr("ps4.details")},
                  {{PsBtn::Square}, i18n::tr("ps4.settings.title")}, {{PsBtn::Triangle}, i18n::tr("ps4.refresh")}};
-        hints.push_back({{}, i18n::tr("ps4.search.hint_main")});
+        hints.push_back({{PsBtn::Touchpad}, i18n::tr("ps4.search")});
         if (!query_.empty()) hints.push_back({{PsBtn::Circle}, i18n::tr("ps4.search.clear")});
         if (upd_.state() == SelfUpdater::State::Ready) hints.push_back({{PsBtn::Options}, i18n::tr("ps4.update_store")});
     }
@@ -1435,17 +1453,35 @@ std::string Ui::fmtDate(const std::string& iso) const {
 }
 
 void Ui::drawHeartIcon(float x, float y, float w, SDL_Color c, float alpha) {
-    const float r = w * 0.27f;
-    fillRound(x, y, r * 2.f, r * 2.f, r, c, alpha);
-    fillRound(x + w - r * 2.f, y, r * 2.f, r * 2.f, r, c, alpha);
-    SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(r_, c.r, c.g, c.b, (Uint8)(anim::clamp01(alpha) * 255));
-    const int rows = (int)(w * 0.62f);
-    for (int i = 0; i < rows; ++i) {
-        const float hw = (w * 0.5f) * (1.f - (float)i / (float)rows);
-        SDL_Rect row{(int)std::lround(x + w / 2.f - hw), (int)std::lround(y + r + i * 0.9f), std::max(1, (int)std::lround(hw * 2.f)), 1};
-        SDL_RenderFillRect(r_, &row);
+    const int N = std::max(8, (int)std::lround(w));
+    const int key = 900000 + N;
+    SDL_Texture* t = nullptr;
+    auto it = iconTextures_.find(key);
+    if (it != iconTextures_.end()) t = it->second;
+    else {
+        const int SS = 4;
+        std::vector<unsigned char> px((size_t)N * N * 4, 255);
+        for (int py = 0; py < N; ++py)
+            for (int pxl = 0; pxl < N; ++pxl) {
+                int hit = 0;
+                for (int sy = 0; sy < SS; ++sy)
+                    for (int sx = 0; sx < SS; ++sx) {
+                        const float u = ((pxl + (sx + 0.5f) / SS) / N) * 2.4f - 1.2f;
+                        const float v = 1.3f - ((py + (sy + 0.5f) / SS) / N) * 2.4f;
+                        const float q = u * u + v * v - 1.f;
+                        if (q * q * q - u * u * v * v * v <= 0.f) ++hit;
+                    }
+                px[((size_t)py * N + pxl) * 4 + 3] = (unsigned char)(255 * hit / (SS * SS));
+            }
+        t = gfx::makeTexture(r_, px.data(), N, N);
+        if (t) SDL_SetTextureBlendMode(t, SDL_BLENDMODE_BLEND);
+        iconTextures_[key] = t;
     }
+    if (!t) return;
+    SDL_SetTextureColorMod(t, c.r, c.g, c.b);
+    SDL_SetTextureAlphaMod(t, (Uint8)(anim::clamp01(alpha) * 255));
+    SDL_Rect d{(int)std::lround(x), (int)std::lround(y), N, N};
+    SDL_RenderCopy(r_, t, nullptr, &d);
 }
 
 void Ui::drawDownIcon(float x, float y, float w, SDL_Color c, float alpha) {
@@ -1516,82 +1552,132 @@ std::string Ui::fmtGb(uint64_t bytes) const {
 
 void Ui::drawSettings() {
     if (!settings_) return;
-    const float pw = 1240.f, ph = 830.f;
-    const float x = (W - pw) / 2.f, y = 176.f + (1020.f - 176.f - ph) / 2.f;
-    glassPanel(x, y, pw, ph, 30.f, true);
-    const float pad = 56.f, vx = x + pad + 420.f, vw = x + pw - pad - vx;
-    text_.draw(i18n::tr("ps4.settings.title"), 36, x + pad, y + 32.f, kText);
+    SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(r_, kBar.r, kBar.g, kBar.b, 247);
+    SDL_Rect bg{0, 176, W, 844};
+    SDL_RenderFillRect(r_, &bg);
 
-    {
-        const float ry = y + 100.f;
-        text_.draw(i18n::tr("ps4.set.app_version"), 22, x + pad, ry, kMuted);
-        const std::string ver = "v" APP_VERSION;
-        text_.draw(ver, 24, vx, ry - 2.f, kText);
-        std::string st;
-        SDL_Color sc = kMuted;
-        switch (upd_.state()) {
-            case SelfUpdater::State::Ready: st = i18n::tr("ps4.set.update_avail", {{"v", upd_.info().version}}); sc = kOrange; break;
-            case SelfUpdater::State::UpToDate: st = i18n::tr("ps4.set.uptodate"); sc = kGreen; break;
-            case SelfUpdater::State::Checking: st = i18n::tr("ps4.set.checking"); break;
-            case SelfUpdater::State::Downloading: st = i18n::tr("ps4.upd.downloading", {{"pct", std::to_string((int)std::lround(std::max(0.f, upd_.progress()) * 100.f))}}); sc = kOrange; break;
-            case SelfUpdater::State::Failed: st = i18n::tr("ps4.set.check_failed"); break;
-            default: break;
+    const float x0 = 300.f, x1 = W - 300.f, cw = x1 - x0;
+    text_.draw(i18n::tr("ps4.settings.title"), 40, x0, 196.f, kText);
+
+    auto section = [&](const std::string& label, float y) {
+        text_.draw(label, 18, x0, y, kCyan);
+        fillRound(x0, y + 30.f, cw, 1.f, 0.5f, kBorder, 0.55f);
+    };
+    auto row = [&](int i, float y, const std::string& label) {
+        const bool on = i == setRow_;
+        if (on) fillRound(x0 - 24.f, y + 4.f, 5.f, 40.f, 2.5f, kAccent, 1.f);
+        text_.draw(label, 27, x0, y + 8.f, on ? kWhite : kBody);
+        fillRound(x0, y + 56.f, cw, 1.f, 0.5f, kBorder, 0.2f);
+    };
+    auto segs = [&](float y, const std::vector<std::string>& names, int active, bool focus, const std::vector<SDL_Color>* dots) {
+        float x = x1;
+        for (int k = (int)names.size() - 1; k >= 0; --k) {
+            const float w = (float)text_.width(names[k], 24) + 44.f + (dots ? 22.f : 0.f);
+            x -= w;
+            const bool act = k == active;
+            if (act) fillRound(x, y, w, 46.f, 23.f, focus ? kAccent : kBorder, focus ? 1.f : 0.55f);
+            float tx = x + 22.f;
+            if (dots) { fillRound(tx, y + 16.f, 14.f, 14.f, 7.f, (*dots)[k], 1.f); tx += 22.f; }
+            text_.draw(names[k], 24, tx, y + 8.f, act ? kWhite : kMuted);
+            x -= 6.f;
         }
-        text_.draw(st, 22, vx + text_.width(ver, 24) + 26.f, ry, sc, 1.f, TextRenderer::Left, (int)(vw - text_.width(ver, 24) - 26.f));
+    };
+
+    section(i18n::tr("ps4.set.sec.prefs"), 250.f);
+    row(0, 296.f, i18n::tr("ps4.language"));
+    std::vector<std::string> langs;
+    for (int i = 0; i < i18n::COUNT; ++i) langs.push_back(i18n::kNames[i]);
+    segs(298.f, langs, i18n::index(), setRow_ == 0, nullptr);
+    row(1, 352.f, i18n::tr("ps4.theme"));
+    std::vector<std::string> themes;
+    std::vector<SDL_Color> dots;
+    for (int t = 0; t < settings::THEMES; ++t) { themes.push_back(i18n::tr(std::string("theme.") + settings::palette(t).id)); dots.push_back(settings::palette(t).accent); }
+    segs(354.f, themes, cfg_.theme, setRow_ == 1, &dots);
+    row(2, 408.f, i18n::tr("ps4.sort"));
+    const std::vector<std::string> sorts = {i18n::tr("ps4.sort.default"), i18n::tr("ps4.sort.az"), i18n::tr("ps4.sort.recent"), i18n::tr("ps4.sort.likes")};
+    segs(410.f, sorts, cfg_.sort, setRow_ == 2, nullptr);
+
+    SDL_Color sc = kMuted;
+    std::string st;
+    switch (upd_.state()) {
+        case SelfUpdater::State::Ready: st = i18n::tr("ps4.set.update_avail", {{"v", upd_.info().version}}); sc = kOrange; break;
+        case SelfUpdater::State::UpToDate: st = i18n::tr("ps4.set.uptodate"); sc = kGreen; break;
+        case SelfUpdater::State::Checking: st = i18n::tr("ps4.set.checking"); break;
+        case SelfUpdater::State::Downloading: st = i18n::tr("ps4.upd.downloading", {{"pct", std::to_string((int)std::lround(std::max(0.f, upd_.progress()) * 100.f))}}); sc = kOrange; break;
+        case SelfUpdater::State::Failed: st = i18n::tr("ps4.set.check_failed"); if (!upd_.error().empty()) st += " : " + upd_.error(); break;
+        default: break;
     }
+    section(i18n::tr("ps4.set.sec.actions"), 480.f);
+    row(3, 522.f, upd_.state() == SelfUpdater::State::Ready ? i18n::tr("ps4.upd.apply", {{"v", upd_.info().version}}) : i18n::tr("ps4.set.check_now"));
+    text_.draw(st, 24, x1, 530.f, sc, 1.f, TextRenderer::Right, 700);
+    row(4, 578.f, i18n::tr("ps4.set.clear_cache"));
+    row(5, 634.f, i18n::tr(remote_.paired() ? "ps4.set.unlink" : "ps4.set.link"));
+    if (remote_.paired()) text_.draw(i18n::tr("ps4.set.linked_as", {{"name", cfg_.paired_username}}), 24, x1, 642.f, kGreen, 1.f, TextRenderer::Right, 700);
+    else text_.draw(i18n::tr("ps4.set.not_linked"), 24, x1, 642.f, kMuted, 1.f, TextRenderer::Right, 700);
+
+    section(i18n::tr("ps4.set.sec.info"), 706.f);
+    const float ca = x0, cb = x0 + cw / 2.f + 40.f, cwid = cw / 2.f - 40.f;
+    auto item = [&](float x, float y, const std::string& label) { text_.draw(label, 19, x, y, kMuted); };
+
+    item(ca, 752.f, i18n::tr("ps4.set.app_version"));
+    text_.draw("v" APP_VERSION, 26, ca, 779.f, kText);
+    item(ca, 832.f, i18n::tr("ps4.set.storage"));
+    text_.draw(diskValid_ ? i18n::tr("ps4.storage_detail", {{"free", fmtGb(diskFree_)}, {"total", fmtGb(diskTotal_)}}) : i18n::tr("ps4.set.storage_managed"), 26, ca, 859.f, kText, 1.f, TextRenderer::Left, (int)cwid);
     {
-        const float ry = y + 152.f;
-        text_.draw(i18n::tr("ps4.set.storage"), 22, x + pad, ry, kMuted);
-        text_.draw(diskValid_ ? i18n::tr("ps4.storage_detail", {{"free", fmtGb(diskFree_)}, {"total", fmtGb(diskTotal_)}})
-                              : i18n::tr("ps4.set.storage_managed"), 24, vx, ry - 2.f, kText, 1.f, TextRenderer::Left, (int)vw);
-        const float gw = 560.f, gy = ry + 44.f;
-        fillRound(vx, gy, gw, 14.f, 7.f, kBorder, 0.35f);
+        const float gw = std::min(cwid, 560.f), gy = 906.f;
+        fillRound(ca, gy, gw, 12.f, 6.f, kBorder, 0.35f);
         if (diskValid_ && diskTotal_ > 0) {
             const float used = anim::clamp01((float)((double)(diskTotal_ - std::min(diskTotal_, diskFree_)) / (double)diskTotal_));
-            if (used > 0.f) fillRound(vx, gy, std::max(14.f, gw * used), 14.f, 7.f, used > 0.9f ? kOrange : kAccent, 1.f);
+            if (used > 0.f) fillRound(ca, gy, std::max(12.f, gw * used), 12.f, 6.f, used > 0.9f ? kOrange : kAccent, 1.f);
         }
     }
+
+    item(cb, 752.f, i18n::tr("ps4.set.server"));
     {
-        const float ry = y + 240.f;
-        text_.draw(i18n::tr("ps4.set.server"), 22, x + pad, ry, kMuted);
         const bool connected = catalog_.state() == Catalog::State::Ready && !catalog_.fromCache();
         const bool connecting = catalog_.state() == Catalog::State::Loading;
         const std::string addr = catalog_.server();
-        const int aw = std::min((int)vw - 220, text_.width(addr, 24));
-        text_.draw(addr, 24, vx, ry - 2.f, kText, 1.f, TextRenderer::Left, aw);
-        text_.draw(i18n::tr(connected ? "ps4.set.connected" : connecting ? "ps4.set.connecting" : "ps4.set.offline"), 22, vx + aw + 26.f, ry,
+        const int aw = std::min((int)cwid - 200, text_.width(addr, 26));
+        text_.draw(addr, 26, cb, 779.f, kText, 1.f, TextRenderer::Left, aw);
+        text_.draw(i18n::tr(connected ? "ps4.set.connected" : connecting ? "ps4.set.connecting" : "ps4.set.offline"), 22, cb + aw + 24.f, 783.f,
                    connected ? kGreen : connecting ? kMuted : kOrange);
     }
-    {
-        const float ry = y + 292.f;
-        text_.draw(i18n::tr("ps4.set.installed_count"), 22, x + pad, ry, kMuted);
-        text_.draw(std::to_string(installedCount()), 24, vx, ry - 2.f, kText);
-    }
-    {
-        const float ry = y + 344.f;
-        text_.draw(i18n::tr("ps4.set.account"), 22, x + pad, ry, kMuted);
-        if (remote_.paired()) text_.draw(i18n::tr("ps4.set.linked_as", {{"name", cfg_.paired_username}}), 24, vx, ry - 2.f, kGreen, 1.f, TextRenderer::Left, (int)vw);
-        else text_.draw(i18n::tr("ps4.set.not_linked"), 24, vx, ry - 2.f, kMuted);
-    }
-    fillRound(x + pad, y + 396.f, pw - 2 * pad, 2.f, 1.f, kBorder, 0.45f);
+    item(cb, 832.f, i18n::tr("ps4.set.installed_count"));
+    text_.draw(std::to_string(installedCount()), 26, cb, 859.f, kText);
+}
 
-    const std::string labels[5] = {i18n::tr("ps4.language"), i18n::tr("ps4.theme"), upd_.state() == SelfUpdater::State::Ready ? i18n::tr("ps4.upd.apply", {{"v", upd_.info().version}}) : i18n::tr("ps4.set.check_now"), i18n::tr("ps4.set.clear_cache"),
-                                   i18n::tr(remote_.paired() ? "ps4.set.unlink" : "ps4.set.link")};
-    const std::string values[2] = {i18n::kNames[i18n::index()], i18n::tr(std::string("theme.") + settings::palette(cfg_.theme).id)};
-    for (int i = 0; i < 5; ++i) {
-        const float ry = y + 414.f + i * 72.f;
-        const bool on = i == setRow_;
-        if (on) fillRound(x + pad - 16.f, ry - 8.f, pw - 2 * pad + 32.f, 60.f, 20.f, kAccent, 0.28f);
-        text_.draw(labels[i], 26, x + pad, ry + 8.f, kText);
-        if (i < 2) text_.draw("<   " + values[i] + "   >", 26, x + pw - pad, ry + 8.f, on ? kText : kMuted, 1.f, TextRenderer::Right);
+void Ui::drawHistory() {
+    if (!historyOpen_) return;
+    SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(r_, kBar.r, kBar.g, kBar.b, 252);
+    SDL_Rect bg{0, 176, W, 844};
+    SDL_RenderFillRect(r_, &bg);
+    const float x0 = 300.f, x1 = W - 300.f, cw = x1 - x0;
+    text_.draw(i18n::tr("ps4.history"), 40, x0, 196.f, kText);
+    const std::vector<SelfUpdater::Entry> h = upd_.history();
+    if (h.empty()) {
+        text_.draw(i18n::tr("ps4.history.empty"), 26, x0, 290.f, kMuted, 1.f, TextRenderer::Left, (int)cw);
+        return;
     }
-    for (int t = 0; t < settings::THEMES; ++t) {
-        const settings::Palette& p = settings::palette(t);
-        const float sx = x + pw - pad - (settings::THEMES - t) * 62.f + 14.f, sy = y + 26.f;
-        fillRound(sx - 3.f, sy - 3.f, 48.f, 48.f, 24.f, t == cfg_.theme ? kText : kMuted, t == cfg_.theme ? 1.f : 0.3f);
-        fillRound(sx, sy, 42.f, 42.f, 21.f, SDL_Color{(Uint8)p.grad[3], (Uint8)p.grad[4], (Uint8)p.grad[5], 255}, 1.f);
-        fillRound(sx + 21.f, sy, 21.f, 42.f, 10.f, p.accent, 1.f);
+    const int vis = 5;
+    const int first = std::max(0, std::min(histSel_ - vis / 2, (int)h.size() - vis));
+    for (int k = 0; k < vis && first + k < (int)h.size(); ++k) {
+        const int idx = first + k;
+        const SelfUpdater::Entry& e = h[idx];
+        const float y = 262.f + k * 148.f;
+        const bool on = idx == histSel_;
+        if (on) fillRound(x0 - 24.f, y + 4.f, 5.f, 110.f, 2.5f, kAccent, 1.f);
+        text_.draw("v" + e.version, 32, x0, y, on ? kWhite : kText);
+        if (e.version == APP_VERSION) text_.draw(i18n::tr("ps4.history.current"), 20, x0 + 190.f, y + 10.f, kGreen);
+        text_.draw(e.date, 22, x1, y + 6.f, kMuted, 1.f, TextRenderer::Right);
+        const std::string note = e.notes.empty() ? "-" : e.notes;
+        const auto lines = wrap(note, 23, (int)cw - 20, 2);
+        float ly = y + 52.f;
+        for (const auto& l : lines) { text_.draw(l, 23, x0, ly, on ? kBody : kMuted); ly += 32.f; }
+        fillRound(x0, y + 126.f, cw, 1.f, 0.5f, kBorder, 0.25f);
     }
+    text_.draw(std::to_string(histSel_ + 1) + " / " + std::to_string(h.size()), 20, x1, 196.f + 14.f, kMuted, 1.f, TextRenderer::Right);
 }
 
 void Ui::drawPair() {
@@ -1626,6 +1712,99 @@ void Ui::drawPair() {
     if (working) text_.draw(i18n::tr("ps4.pair.working"), 24, x + pw / 2.f, y + ph - 70.f, kText, 0.6f + 0.4f * std::sin(time_ * 5.f), TextRenderer::Center);
     else if (!pairError_.empty()) text_.draw(pairError_, 22, x + pw / 2.f, y + ph - 70.f, kOrange, 1.f, TextRenderer::Center, (int)(pw - 2 * pad));
     else text_.draw(i18n::tr("ps4.pair.keys"), 20, x + pw / 2.f, y + ph - 66.f, kMuted, 1.f, TextRenderer::Center, (int)(pw - 2 * pad));
+}
+
+namespace {
+std::u16string utf8to16(const std::string& s) {
+    std::u16string o;
+    for (size_t i = 0; i < s.size();) {
+        const unsigned char c = (unsigned char)s[i];
+        uint32_t cp = c;
+        int n = 1;
+        if (c >= 0xF0 && i + 3 < s.size()) { cp = ((c & 7u) << 18) | (((unsigned char)s[i + 1] & 63u) << 12) | (((unsigned char)s[i + 2] & 63u) << 6) | ((unsigned char)s[i + 3] & 63u); n = 4; }
+        else if (c >= 0xE0 && i + 2 < s.size()) { cp = ((c & 15u) << 12) | (((unsigned char)s[i + 1] & 63u) << 6) | ((unsigned char)s[i + 2] & 63u); n = 3; }
+        else if (c >= 0xC0 && i + 1 < s.size()) { cp = ((c & 31u) << 6) | ((unsigned char)s[i + 1] & 63u); n = 2; }
+        if (cp >= 0x10000) { cp -= 0x10000; o += (char16_t)(0xD800 + (cp >> 10)); o += (char16_t)(0xDC00 + (cp & 0x3FF)); }
+        else o += (char16_t)cp;
+        i += n;
+    }
+    return o;
+}
+std::string utf16to8(const char16_t* p, size_t max) {
+    std::string o;
+    for (size_t i = 0; i < max && p[i]; ++i) {
+        uint32_t cp = p[i];
+        if (cp >= 0xD800 && cp < 0xDC00 && i + 1 < max && p[i + 1] >= 0xDC00 && p[i + 1] < 0xE000) { cp = 0x10000 + ((cp - 0xD800) << 10) + (p[i + 1] - 0xDC00); ++i; }
+        if (cp < 0x80) o += (char)cp;
+        else if (cp < 0x800) { o += (char)(0xC0 | (cp >> 6)); o += (char)(0x80 | (cp & 63)); }
+        else if (cp < 0x10000) { o += (char)(0xE0 | (cp >> 12)); o += (char)(0x80 | ((cp >> 6) & 63)); o += (char)(0x80 | (cp & 63)); }
+        else { o += (char)(0xF0 | (cp >> 18)); o += (char)(0x80 | ((cp >> 12) & 63)); o += (char)(0x80 | ((cp >> 6) & 63)); o += (char)(0x80 | (cp & 63)); }
+    }
+    return o;
+}
+}
+
+bool Ui::startIme(int mode) {
+    if (!imeTried_) { imeTried_ = true; imeReady_ = platform::initImeDialog(); }
+    if (!imeReady_) return false;
+    std::memset(imeBuf_, 0, sizeof imeBuf_);
+    imeMode_ = mode;
+    const std::u16string cur = utf8to16(mode == 1 ? pairCode_ : query_);
+    const size_t cap = mode == 1 ? 6 : 40;
+    for (size_t i = 0; i < cur.size() && i < cap; ++i) imeBuf_[i] = cur[i];
+    imeTitle_ = utf8to16(i18n::tr(mode == 1 ? "ps4.pair.title" : "ps4.search"));
+    imePlace_ = utf8to16(i18n::tr(mode == 1 ? "ps4.pair.ph" : "ps4.search.ph"));
+    OrbisImeDialogSetting p;
+    std::memset(&p, 0, sizeof p);
+    p.userId = (uint32_t)in_.userId();
+    p.type = mode == 1 ? ORBIS_TYPE_BASIC_LATIN : ORBIS_TYPE_DEFAULT;
+    p.supportedLanguages = 0;
+    p.enterLabel = mode == 1 ? ORBIS_BUTTON_LABEL_GO : ORBIS_BUTTON_LABEL_SEARCH;
+    p.inputMethod = ORBIS__DEFAULT;
+    p.filter = nullptr;
+    p.option = 0;
+    p.maxTextLength = (uint32_t)cap;
+    p.inputTextBuffer = reinterpret_cast<wchar_t*>(imeBuf_);
+    p.posx = W / 2.f;
+    p.posy = H / 2.f;
+    p.horizontalAlignment = ORBIS_H_CENTER;
+    p.verticalAlignment = ORBIS_V_CENTER;
+    p.placeholder = reinterpret_cast<const wchar_t*>(imePlace_.c_str());
+    p.title = reinterpret_cast<const wchar_t*>(imeTitle_.c_str());
+    const int rc = (int)sceImeDialogInit(&p, nullptr);
+    platform::bootLogf("ime: sceImeDialogInit rc=0x%08X", (unsigned)rc);
+    if (rc < 0) return false;
+    imeActive_ = true;
+    return true;
+}
+
+void Ui::pollIme() {
+    if (!imeActive_) return;
+    if (sceImeDialogGetStatus() != ORBIS_DIALOG_STATUS_STOPPED) return;
+    OrbisDialogResult res;
+    std::memset(&res, 0, sizeof res);
+    sceImeDialogGetResult(&res);
+    if (res.endstatus == ORBIS_DIALOG_OK && imeMode_ == 1) {
+        const std::string raw = utf16to8(imeBuf_, 6);
+        std::string code;
+        for (char ch : raw) {
+            const char u = (ch >= 'a' && ch <= 'z') ? (char)(ch - 32) : ch;
+            if (u && std::strchr(kPairAlphabet, u)) code += u;
+        }
+        pairCode_ = code;
+        pairError_.clear();
+        if (pairCode_.size() == 6) {
+            if (offline()) pairError_ = i18n::tr("ps4.offline_blocked");
+            else { pairWaiting_ = true; remote_.pair(pairCode_, "PS4"); }
+        } else if (!pairCode_.empty()) pairError_ = i18n::tr("ps4.pair.incomplete");
+    } else if (res.endstatus == ORBIS_DIALOG_OK) {
+        query_ = utf16to8(imeBuf_, 40);
+        while (!query_.empty() && query_.back() == ' ') query_.pop_back();
+        sel_ = 0;
+        rebuildFilter();
+    }
+    sceImeDialogTerm();
+    imeActive_ = false;
 }
 
 void Ui::drawSearch() {

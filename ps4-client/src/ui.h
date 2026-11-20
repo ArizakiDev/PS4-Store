@@ -25,7 +25,7 @@
 #include "self_updater.h"
 #include "updater.h"
 
-enum class PsBtn { Cross, Circle, Triangle, Square, L1, R1, Options };
+enum class PsBtn { Cross, Circle, Triangle, Square, L1, R1, Options, Touchpad };
 
 class Ui {
 public:
@@ -34,7 +34,7 @@ public:
     static constexpr int TABS = 6;
     enum TabKind { K_ALL, K_NEW, K_FEATURED, K_INSTALLED, K_LIBRARY, K_SETTINGS };
     TabKind tabKind(int i) const {
-        static const TabKind t[TABS] = {K_ALL, K_NEW, K_FEATURED, K_INSTALLED, K_LIBRARY, K_SETTINGS};
+        static const TabKind t[TABS] = {K_FEATURED, K_NEW, K_ALL, K_INSTALLED, K_LIBRARY, K_SETTINGS};
         if (!remote_.paired() && i >= 4) return K_SETTINGS;
         return t[std::max(0, std::min(TABS - 1, i))];
     }
@@ -53,6 +53,7 @@ public:
     void onResume();
 
     void warn(const std::string& msg) { if (!msg.empty()) alerts_.push_back(msg); }
+    void announce(bool ok, const std::string& msg) { notify(ok, msg, 8.f); }
 
 private:
     SDL_Texture* roundTex(int r);
@@ -75,6 +76,10 @@ private:
     void drawSettings();
     void drawPair();
     void drawSearch();
+    bool startIme(int mode = 0);
+    void drawHistory();
+    void pollIme();
+    void ensureLogo();
     bool matchesQuery(const Game& g) const;
     std::string buildHeartbeat() const;
     void handleCommand(const RemoteSync::Command& c);
@@ -159,6 +164,16 @@ private:
     std::string pairCode_, pairError_;
     int pairCursor_ = 0;
     bool searchOpen_ = false;
+    int updCount_ = 0;
+    int imeMode_ = 0;
+    bool historyOpen_ = false;
+    int histSel_ = 0;
+    float updPoll_ = 0.f;
+    float updAt_ = -10.f;
+    bool imeTried_ = false, imeReady_ = false, imeActive_ = false;
+    char16_t imeBuf_[64] = {};
+    std::u16string imeTitle_, imePlace_;
+    SDL_Texture* logoTex_ = nullptr;
     std::string query_;
     int kbCursor_ = 0;
     float heartbeatTimer_ = 0.f;
@@ -191,7 +206,7 @@ private:
     std::vector<int> filtered_;
     std::vector<anim::Smooth> cardScale_;
 
-    int tab_ = 0;
+    int tab_ = 2;
     int sel_ = 0;
     int lastSel_ = -1;
     float selIdle_ = 0.f;

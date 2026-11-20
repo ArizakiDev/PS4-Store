@@ -1125,6 +1125,10 @@ function currentRelease() {
   } catch (_) {  }
   if (!info || !info.version) return null;
   const log = readClientChangelog();
+  if (info.version && !log.some((e) => e.version === info.version)) {
+    log.unshift({ version: info.version, date: String(info.updated_at || '').slice(0, 10) || new Date().toISOString().slice(0, 10), notes: '' });
+    try { fs.writeFileSync(CLIENT_CHANGELOG_FILE, JSON.stringify(log, null, 2) + '\n'); } catch (_) {  }
+  }
   const entry = log.find((e) => e.version === info.version) || log[0] || null;
   return {
     version: info.version, pkg_url: '/store/PS4Store.pkg', file_size: info.size, changelog: entry ? entry.notes : '',

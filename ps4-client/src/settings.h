@@ -15,7 +15,8 @@ struct Palette {
 const Palette& palette(int theme);
 
 struct Values {
-    int theme = 1;
+    int theme = 0;
+    int sort = 0;
     std::string lang;
     std::string device_token, paired_username;
 };

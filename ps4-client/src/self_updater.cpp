@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <sys/stat.h>
+#include <thread>
 
 #include "appinfo.h"
 #include "http.h"
@@ -14,6 +15,9 @@
 
 extern "C" {
 int sceSystemServiceLoadExec(const char* path, const char* const* argv);
+int sceAppInstUtilInitialize(void);
+int sceAppInstUtilAppPrepareOverwritePkg(const char* pkgPath);
+int sceAppInstUtilAppInstallPkg(const char* pkgPath, void* reserved);
 }
 
 namespace {
@@ -33,7 +37,7 @@ SelfUpdater::~SelfUpdater() {
 void SelfUpdater::check(bool force) {
     if (state_ == State::Checking || state_ == State::Downloading) return;
     auto now = std::chrono::steady_clock::now();
-    if (!force && everChecked_ && now - lastCheck_ < std::chrono::minutes(30)) return;
+    if (!force && everChecked_ && now - lastCheck_ < (state_ == State::Failed ? retry_ : std::chrono::seconds(1800))) return;
     if (state_ == State::Ready && !force) return;
     join();
     everChecked_ = true;
@@ -51,7 +55,28 @@ void SelfUpdater::check(bool force) {
 }
 
 SelfUpdater::Info SelfUpdater::info() const { std::lock_guard<std::mutex> l(m_); return info_; }
+std::vector<SelfUpdater::Entry> SelfUpdater::history() const { std::lock_guard<std::mutex> l(m_); return history_; }
 std::string SelfUpdater::error() const { std::lock_guard<std::mutex> l(m_); return error_; }
+
+void SelfUpdater::markApplying() const {
+    const Info i = info();
+    platform::makeDirs(kUpdateDir);
+    if (FILE* f = std::fopen(kMarker, "wb")) {
+        std::fwrite(i.version.data(), 1, i.version.size(), f);
+        std::fclose(f);
+    }
+}
+
+bool SelfUpdater::consumeApplyMarker(std::string& version) {
+    FILE* f = std::fopen(kMarker, "rb");
+    if (!f) return false;
+    char buf[64] = {};
+    const size_t n = std::fread(buf, 1, sizeof buf - 1, f);
+    std::fclose(f);
+    std::remove(kMarker);
+    version.assign(buf, n);
+    return !version.empty();
+}
 
 bool SelfUpdater::canApply(std::string& err) const {
     unsigned long long a = 0, b = 0;
@@ -61,8 +86,16 @@ bool SelfUpdater::canApply(std::string& err) const {
 }
 
 void SelfUpdater::run() {
+    retry_ = std::chrono::seconds(45);
     std::string body, err;
-    long code = http::get(server_ + "/api/client-version", body, err, 15);
+    long code = 0;
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        body.clear(); err.clear();
+        code = http::get(server_ + "/api/client-version", body, err, 15);
+        if (code == 200 || code == 404) break;
+        platform::bootLogf("self_updater: tentative %d echouee code=%ld (%s)", attempt + 1, code, err.c_str());
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+    }
     json::Object o;
     if (code != 200 || !json::parseObject(body, o) || o["version"].empty()) {
         const std::string reason = code == 404 ? "Le serveur ne propose pas de mise a jour" : !err.empty() ? err : "Reponse invalide du serveur";
@@ -77,6 +110,21 @@ void SelfUpdater::run() {
     i.pkgUrl = !path.empty() && path[0] == '/' ? server_ + path : server_ + "/store/PS4Store.pkg";
     i.notes = o["notes"].empty() ? o["changelog"] : o["notes"];
     const unsigned long long expected = (unsigned long long)std::strtoull(o["file_size"].c_str(), nullptr, 10);
+    {
+        std::vector<Entry> h;
+        const std::string first = o["updated_at"].size() >= 10 ? o["updated_at"].substr(0, 10) : std::string();
+        h.push_back({i.version, i.notes, first});
+        std::vector<json::Object> arr;
+        if (json::objectArrayField(body, "history", arr)) {
+            for (auto& e : arr) {
+                if (e["version"].empty() || e["version"] == i.version) continue;
+                const std::string n = e["changelog"].empty() ? e["notes"] : e["changelog"];
+                h.push_back({e["version"], n, e["updated_at"].size() >= 10 ? e["updated_at"].substr(0, 10) : e["updated_at"]});
+            }
+        }
+        std::lock_guard<std::mutex> l(m_);
+        history_ = h;
+    }
     const bool newer = installed::compareVersions(APP_VERSION, i.version) < 0;
     platform::bootLogf("self_updater: installee=%s serveur=%s -> %s", APP_VERSION, i.version.c_str(), newer ? "MISE A JOUR" : "a jour");
     { std::lock_guard<std::mutex> l(m_); info_ = i; error_.clear(); }
@@ -103,6 +151,7 @@ void SelfUpdater::run() {
         progress_ = all > 0 ? (float)((double)done / (double)all) : -1.f;
     }, nullptr, err);
     if (code != 200) {
+        retry_ = std::chrono::seconds(300);
         platform::bootLogf("self_updater: telechargement echoue code=%ld (%s)", code, err.c_str());
         { std::lock_guard<std::mutex> l(m_); error_ = err.empty() ? "HTTP " + std::to_string(code) : err; }
         state_ = State::Failed;
@@ -127,6 +176,7 @@ void SelfUpdater::run() {
     if (!ok) {
         std::remove(kUpdatePkg);
         { std::lock_guard<std::mutex> l(m_); error_ = herr; }
+        retry_ = std::chrono::seconds(300);
         platform::bootLogf("self_updater: paquet refuse (%s)", herr.c_str());
         state_ = State::Failed;
         return;
@@ -139,7 +189,14 @@ void SelfUpdater::run() {
 bool SelfUpdater::installUpdaterElf(const std::string& bytes) {
     if (bytes.empty()) return false;
     unsigned long long cur = 0;
-    if (fileSize(kUpdaterElf, cur) && cur == bytes.size()) return true;
+    if (fileSize(kUpdaterElf, cur) && cur == bytes.size()) {
+        if (FILE* f = std::fopen(kUpdaterElf, "rb")) {
+            std::string have(bytes.size(), '\0');
+            const size_t n = std::fread(&have[0], 1, have.size(), f);
+            std::fclose(f);
+            if (n == bytes.size() && have == bytes) return true;
+        }
+    }
     platform::makeDirs("/data/PS4Store");
     const std::string tmp = std::string(kUpdaterElf) + ".tmp";
     FILE* f = std::fopen(tmp.c_str(), "wb");
@@ -157,7 +214,13 @@ bool SelfUpdater::launchUpdaterAndExit() {
     platform::bootLog("self_updater: lancement de updater.elf puis sortie");
     const char* const argv[] = {kUpdaterElf, nullptr};
     int rc = sceSystemServiceLoadExec(kUpdaterElf, argv);
-    platform::bootLogf("self_updater: LoadExec(updater.elf) rc=0x%08X -> sortie simple", (unsigned)rc);
+    platform::bootLogf("self_updater: LoadExec(updater.elf) rc=0x%08X", (unsigned)rc);
+    if (rc < 0) {
+        const int ri = sceAppInstUtilInitialize();
+        const int rp = sceAppInstUtilAppPrepareOverwritePkg(kUpdatePkg);
+        const int rk = sceAppInstUtilAppInstallPkg(kUpdatePkg, nullptr);
+        platform::bootLogf("self_updater: installation directe init=0x%08X prepare=0x%08X install=0x%08X", (unsigned)ri, (unsigned)rp, (unsigned)rk);
+    }
     sceSystemServiceLoadExec("exit", nullptr);
     return false;
 }

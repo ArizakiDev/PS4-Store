@@ -23,6 +23,7 @@ extern "C" {
 int sceKernelUsleep(unsigned int microseconds);
 int sceAppInstUtilInitialize(void);
 int sceAppInstUtilAppInstallPkg(const char* pkgPath, void* reserved);
+int sceAppInstUtilAppPrepareOverwritePkg(const char* pkgPath);
 int sceUserServiceInitialize(void* params);
 int sceUserServiceGetForegroundUser(int* userId);
 int sceSystemServiceLaunchApp(const char* titleId, const char* const* argv, LaunchParam* param);
@@ -47,12 +48,14 @@ int main(int, char**) {
 
     const long before = mtimeOf(APP_PKG);
     sceAppInstUtilInitialize();
+    const int rp = sceAppInstUtilAppPrepareOverwritePkg(UPDATE_PKG);
+    logLine("updater: PrepareOverwritePkg rc=0x%08lX", (long)(unsigned)rp);
     int rc = sceAppInstUtilAppInstallPkg(UPDATE_PKG, nullptr);
     logLine("updater: AppInstallPkg rc=0x%08lX", (long)(unsigned)rc);
 
     bool installed = false;
     if (rc == 0) {
-        for (int i = 0; i < 90 && !installed; ++i) {
+        for (int i = 0; i < 150 && !installed; ++i) {
             sceKernelUsleep(1000000);
             const long now = mtimeOf(APP_PKG);
             installed = now != 0 && now != before;
