@@ -1,6 +1,6 @@
 #pragma once
 
-enum Btn { B_UP, B_DOWN, B_LEFT, B_RIGHT, B_CROSS, B_CIRCLE, B_SQUARE, B_TRIANGLE, B_L1, B_R1, B_OPTIONS, B_COUNT };
+enum Btn { B_UP, B_DOWN, B_LEFT, B_RIGHT, B_CROSS, B_CIRCLE, B_SQUARE, B_TRIANGLE, B_L1, B_R1, B_OPTIONS, B_TOUCHPAD, B_COUNT };
 
 class Input {
 public:

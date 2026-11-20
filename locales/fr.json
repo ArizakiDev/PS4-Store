@@ -274,7 +274,7 @@
   "dash.js.titleid_main": "Title ID du jeu principal.",
   "dash.js.titleid_shared": "Même Title ID que le jeu principal.",
   "ps4.tab.store": "Boutique",
-  "ps4.tab.installed": "Installés",
+  "ps4.tab.installed": "Installé",
   "ps4.tab.settings": "Paramètres",
   "ps4.install": "Installer",
   "ps4.update": "Mettre à jour",
@@ -1198,5 +1198,16 @@
   "wb.el.footer_help_link": "Pied de page : lien Aide",
   "wb.el.footer_api_link": "Pied de page : lien API",
   "vt.video.empty": "Collez un lien YouTube dans l'inspecteur.",
-  "vt.top.empty": "Aucun créateur à afficher pour le moment."
+  "vt.top.empty": "Aucun créateur à afficher pour le moment.",
+  "ps4.search": "Recherche",
+  "ps4.search.ph": "Tapez le nom d'un jeu…",
+  "ps4.search.type": "Saisir",
+  "ps4.search.clear_all": "Tout effacer",
+  "ps4.search.clear": "Effacer la recherche",
+  "ps4.search.hint_main": "Pavé tactile : rechercher",
+  "ps4.space": "Espace",
+  "ps4.search.keys": "Croix : saisir · Carré : effacer · Triangle : espace · L1 : tout effacer · Pavé tactile / Options : fermer",
+  "ps4.tab.all": "Tout",
+  "ps4.tab.new": "Nouveau",
+  "ps4.new.empty": "Aucune nouveauté pour le moment"
 }

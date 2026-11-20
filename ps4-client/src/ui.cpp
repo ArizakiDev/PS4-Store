@@ -29,9 +29,9 @@ const SDL_Color kBtnSquare{244, 114, 182, 255};
 const SDL_Color kWhite{255, 255, 255, 255};
 const SDL_Color kHeart{255, 82, 108, 255};
 const SDL_Color kGreen{48, 209, 88, 255};
+const SDL_Color kGold{255, 196, 45, 255};
 const SDL_Color kOrange{255, 159, 10, 255};
 
-const float kTabFw[Ui::TABS] = {0.f, 0.f, 5.05f, 6.72f, 9.00f, 11.00f, 0.f, 0.f};
 const char* kPairAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 constexpr int COLS = 5;
@@ -389,12 +389,14 @@ std::string Ui::primaryLabel(const Game& g, installed::State st) const {
 }
 
 std::string Ui::tabLabel(int i) const {
-    static const char* fw[] = {"", "", "5.05+", "6.72+", "9.00+", "11.00+"};
-    if (i == 0) return i18n::tr("filter.all");
-    if (i == TAB_FEATURED) return "\xE2\x98\x85 " + i18n::tr("ps4.tab.featured");
-    if (i == TAB_INSTALLED) return i18n::tr("ps4.tab.installed");
-    if (i == TAB_LIBRARY) return i18n::tr("ps4.tab.library");
-    return fw[i];
+    switch (tabKind(i)) {
+        case K_ALL: return i18n::tr("ps4.tab.all");
+        case K_NEW: return i18n::tr("ps4.tab.new");
+        case K_FEATURED: return i18n::tr("ps4.tab.featured");
+        case K_INSTALLED: return i18n::tr("ps4.tab.installed");
+        case K_LIBRARY: return i18n::tr("ps4.tab.library");
+        default: return i18n::tr("ps4.tab.settings");
+    }
 }
 
 std::string Ui::typeLabel(const Game& g) const { return i18n::tr("ps4.type." + g.resource_type); }
@@ -477,17 +479,65 @@ void Ui::rescan() {
     plugins_.refresh(games_);
 }
 
+
+namespace {
+const char* const* kbRows() {
+    static const char* const azerty[4] = {"1234567890", "azertyuiop", "qsdfghjklm", "wxcvbn'.-_"};
+    static const char* const qwerty[4] = {"1234567890", "qwertyuiop", "asdfghjkl-", "zxcvbnm'._"};
+    return std::string(i18n::kCodes[i18n::index()]) == "fr" ? azerty : qwerty;
+}
+char kbChar(int i) { return kbRows()[i / 10][i % 10]; }
+
+std::string foldKey(const std::string& s) {
+    std::string o; o.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        const unsigned char c = (unsigned char)s[i];
+        if (c == 0xC3 && i + 1 < s.size()) {
+            const unsigned char d = (unsigned char)s[++i];
+            const unsigned char e = (d >= 0x80 && d <= 0x9F) ? (unsigned char)(d + 0x20) : d;
+            char r = '?';
+            if (e >= 0xA0 && e <= 0xA5) r = 'a'; else if (e == 0xA7) r = 'c'; else if (e >= 0xA8 && e <= 0xAB) r = 'e';
+            else if (e >= 0xAC && e <= 0xAF) r = 'i'; else if (e == 0xB1) r = 'n'; else if (e >= 0xB2 && e <= 0xB6) r = 'o';
+            else if (e >= 0xB9 && e <= 0xBC) r = 'u'; else if (e == 0xBD || e == 0xBF) r = 'y';
+            o += r;
+        } else o += (c >= 'A' && c <= 'Z') ? (char)(c + 32) : (char)c;
+    }
+    return o;
+}
+}
+
+bool Ui::matchesQuery(const Game& g) const {
+    if (query_.empty()) return true;
+    const std::string hay = foldKey(g.titre + " " + g.title_id + " " + g.categorie + " " + g.author_name);
+    const std::string q = foldKey(query_);
+    size_t i = 0;
+    while (i < q.size()) {
+        while (i < q.size() && q[i] == ' ') ++i;
+        size_t j = i;
+        while (j < q.size() && q[j] != ' ') ++j;
+        if (j > i && hay.find(q.substr(i, j - i)) == std::string::npos) return false;
+        i = j;
+    }
+    return true;
+}
+
 void Ui::rebuildFilter(const std::string& keepId) {
     filtered_.clear();
     for (int i = 0; i < (int)games_.size(); ++i) {
         const std::string& rt = games_[i].resource_type;
-        bool ok = tab_ == TAB_FEATURED ? games_[i].featuredRank > 0
-                : tab_ == TAB_LIBRARY ? libraryIds_.count(games_[i].id) > 0
-                : tab_ == TAB_INSTALLED ? ((rt == "pkg" || rt == "plugin") && stateOf(games_[i]) != installed::State::NotInstalled)
-                                        : (tab_ == 0 || games_[i].fw <= kTabFw[tab_] + 0.001f);
-        if (ok) filtered_.push_back(i);
+        const TabKind kind = tabKind(tab_);
+        bool ok = kind == K_FEATURED ? games_[i].featuredRank > 0
+                : kind == K_LIBRARY ? libraryIds_.count(games_[i].id) > 0
+                : kind == K_INSTALLED ? ((rt == "pkg" || rt == "plugin") && stateOf(games_[i]) != installed::State::NotInstalled)
+                : kind == K_NEW ? !games_[i].updated_at.empty()
+                                : true;
+        if (ok && matchesQuery(games_[i])) filtered_.push_back(i);
     }
-    if (tab_ == TAB_FEATURED)
+    if (tabKind(tab_) == K_NEW) {
+        std::stable_sort(filtered_.begin(), filtered_.end(), [this](int a, int b) { return games_[a].updated_at > games_[b].updated_at; });
+        if (filtered_.size() > 24) filtered_.resize(24);
+    }
+    if (tabKind(tab_) == K_FEATURED)
         std::stable_sort(filtered_.begin(), filtered_.end(), [this](int a, int b) { return games_[a].featuredRank < games_[b].featuredRank; });
     if (!keepId.empty())
         for (int k = 0; k < (int)filtered_.size(); ++k)
@@ -499,6 +549,12 @@ void Ui::rebuildFilter(const std::string& keepId) {
 
 void Ui::setTab(int t) {
     t = std::max(0, std::min(tabCount() - 1, t));
+    if (tabKind(t) == K_SETTINGS) {
+        settings_ = true; setRow_ = 0; refreshDisk();
+        pillX_.set(tabX_[t]);
+        pillW_.set(tabW_[t]);
+        return;
+    }
     if (t == tab_) return;
     tab_ = t;
     sel_ = 0;
@@ -544,7 +600,7 @@ void Ui::update(float dt) {
     if (!tabsMeasured_) {
         float total = 0.f, gap = 6.f;
         const int nTabs = tabCount();
-        for (int i = 0; i < nTabs; ++i) { tabW_[i] = text_.width(tabLabel(i), 24) + 44.f; total += tabW_[i] + (i ? gap : 0); }
+        for (int i = 0; i < nTabs; ++i) { tabW_[i] = text_.width(tabLabel(i), 24) + 44.f + (tabKind(i) == K_FEATURED ? 22.f : 0.f); total += tabW_[i] + (i ? gap : 0); }
         float x = W - 96.f - total;
         for (int i = 0; i < nTabs; ++i) { tabX_[i] = x; x += tabW_[i] + gap; }
         pillX_.snap(tabX_[tab_]);
@@ -590,6 +646,20 @@ void Ui::update(float dt) {
                 else { pairError_.clear(); pairWaiting_ = true; remote_.pair(pairCode_, "PS4"); }
             }
         }
+    } else if (searchOpen_) {
+        if (in_.pressed(B_CIRCLE) || in_.pressed(B_OPTIONS) || in_.pressed(B_TOUCHPAD)) searchOpen_ = false;
+        else {
+            if (in_.pressed(B_LEFT)) kbCursor_ = (kbCursor_ / 10) * 10 + (kbCursor_ % 10 + 9) % 10;
+            if (in_.pressed(B_RIGHT)) kbCursor_ = (kbCursor_ / 10) * 10 + (kbCursor_ % 10 + 1) % 10;
+            if (in_.pressed(B_UP)) kbCursor_ = (kbCursor_ + 30) % 40;
+            if (in_.pressed(B_DOWN)) kbCursor_ = (kbCursor_ + 10) % 40;
+            bool changed = false;
+            if (in_.pressed(B_CROSS) && query_.size() < 40) { query_ += kbChar(kbCursor_); changed = true; }
+            if (in_.pressed(B_SQUARE) && !query_.empty()) { query_.pop_back(); changed = true; }
+            if (in_.pressed(B_TRIANGLE) && !query_.empty() && query_.back() != ' ' && query_.size() < 40) { query_ += ' '; changed = true; }
+            if (in_.pressed(B_L1) && !query_.empty()) { query_.clear(); changed = true; }
+            if (changed) { sel_ = 0; rebuildFilter(); }
+        }
     } else if (modal_ == Modal::Region) {
         if (in_.pressed(B_CIRCLE)) modal_ = Modal::None;
         else {
@@ -604,7 +674,7 @@ void Ui::update(float dt) {
         if (in_.pressed(B_CIRCLE)) modal_ = Modal::None;
         else if (in_.pressed(B_CROSS)) { modal_ = Modal::None; plugins_.install(pending_, plugin::planFor(pending_).supportedMask()); }
     } else if (settings_) {
-        if (in_.pressed(B_CIRCLE) || in_.pressed(B_OPTIONS)) settings_ = false;
+        if (in_.pressed(B_CIRCLE) || in_.pressed(B_OPTIONS)) { settings_ = false; pillX_.set(tabX_[tab_]); pillW_.set(tabW_[tab_]); }
         else {
             if (in_.pressed(B_UP) && setRow_ > 0) --setRow_;
             if (in_.pressed(B_DOWN) && setRow_ < 4) ++setRow_;
@@ -639,7 +709,7 @@ void Ui::update(float dt) {
                     cfg_.paired_username.clear();
                     saveSettings();
                     tabsMeasured_ = false;
-                    if (tab_ == TAB_LIBRARY) setTab(0);
+                    if (tabKind(tab_) == K_LIBRARY) setTab(0);
                     notify(true, i18n::tr("ps4.pair.unlinked"));
                 } else {
                     pairOpen_ = true; pairWaiting_ = false; pairCode_.clear(); pairError_.clear(); pairCursor_ = 0;
@@ -685,6 +755,8 @@ void Ui::update(float dt) {
             else if (in_.pressed(B_OPTIONS)) startReport(*g);
         }
     } else {
+        if (in_.pressed(B_TOUCHPAD)) { searchOpen_ = true; kbCursor_ = 0; }
+        if (in_.pressed(B_CIRCLE) && !query_.empty()) { query_.clear(); sel_ = 0; rebuildFilter(); }
         if (in_.pressed(B_R1)) setTab(tab_ + 1);
         if (in_.pressed(B_L1)) setTab(tab_ - 1);
         int n = (int)filtered_.size();
@@ -697,7 +769,7 @@ void Ui::update(float dt) {
             if (s != sel_) { sel_ = s; ensureVisible(); }
             if (in_.pressed(B_CROSS)) { detail_ = true; rebuildRelated(); refreshDisk(); }
         }
-        if (in_.pressed(B_SQUARE)) { settings_ = true; setRow_ = 0; refreshDisk(); }
+        if (in_.pressed(B_SQUARE)) { setTab(tabCount() - 1); }
         if (in_.pressed(B_OPTIONS) && upd_.state() == SelfUpdater::State::Ready) confirmSelfUpdate_ = true;
         if (in_.pressed(B_TRIANGLE)) {
             upd_.check(true);
@@ -795,7 +867,7 @@ void Ui::update(float dt) {
         cfg_.paired_username.clear();
         saveSettings();
         tabsMeasured_ = false;
-        if (tab_ == TAB_LIBRARY) setTab(0);
+        if (tabKind(tab_) == K_LIBRARY) setTab(0);
         alerts_.push_back(i18n::tr("ps4.pair.revoked"));
     }
     {
@@ -957,6 +1029,7 @@ void Ui::render() {
     drawRelated();
     drawSettings();
     drawPair();
+    drawSearch();
     drawRegionModal();
     drawConfirm();
     drawAlert();
@@ -975,18 +1048,41 @@ void Ui::drawHeader() {
     SDL_Rect line{0, 175, W, 1};
     SDL_RenderFillRect(r_, &line);
 
-    text_.draw("PS4Store", 46, 96, 62, kText);
-    text_.draw("v" APP_VERSION, 18, 96.f + text_.width("PS4Store", 46) + 16.f, 82.f, kMuted);
-    text_.draw(std::to_string(filtered_.size()) + " " + i18n::tr(filtered_.size() > 1 ? "ps4.title_other" : "ps4.title_one"), 20, 98, 118, kMuted);
+    const float lx = 96.f, ly = 60.f, ls = 64.f;
+    fillRound(lx - 3.f, ly - 3.f, ls + 6.f, ls + 6.f, 20.f, kCyan, 0.18f);
+    fillRound(lx, ly, ls, ls, 17.f, kAccent, 1.f);
+    ringRound(lx, ly, ls, ls, 17.f, kCyan, 0.55f);
+    text_.draw("P", 38, lx + ls / 2, ly + 11.f, kWhite, 1.f, TextRenderer::Center);
 
-    const float ty = 66.f, th = 52.f;
+    const float tx = lx + ls + 22.f;
+    text_.draw("PS4Store", 44, tx, 56.f, kText);
+    const std::string ver = "v" APP_VERSION;
+    const float vx = tx + text_.width("PS4Store", 44) + 16.f, vw = text_.width(ver, 16) + 26.f;
+    fillRound(vx, 70.f, vw, 28.f, 14.f, kSurface, 0.9f);
+    ringRound(vx, 70.f, vw, 28.f, 14.f, kBorder, 0.6f);
+    text_.draw(ver, 16, vx + 13.f, 74.f, kMuted);
+    fillRound(tx + 2.f, 118.f, 10.f, 10.f, 5.f, kCyan, 1.f);
+    std::string sub = std::to_string(filtered_.size()) + " " + i18n::tr(filtered_.size() > 1 ? "ps4.title_other" : "ps4.title_one");
+    if (!query_.empty()) sub += "   \xC2\xB7   " + i18n::tr("ps4.search") + " : " + query_;
+    text_.draw(sub, 20, tx + 22.f, 110.f, query_.empty() ? kMuted : kCyan, 1.f, TextRenderer::Left, 520);
+
+    const float ty = 62.f, th = 56.f;
     const int nTabs = tabCount();
-    fillRound(tabX_[0] - 6, ty - 6, tabX_[nTabs - 1] + tabW_[nTabs - 1] - tabX_[0] + 12, th + 12, (th + 12) / 2, kSurface, 0.62f);
-    ringRound(tabX_[0] - 6, ty - 6, tabX_[nTabs - 1] + tabW_[nTabs - 1] - tabX_[0] + 12, th + 12, (th + 12) / 2, kBorder, 0.55f);
-    fillRound(pillX_.value, ty, pillW_.value, th, th / 2, kAccent, 0.95f);
+    const float barX = tabX_[0] - 7.f, barW = tabX_[nTabs - 1] + tabW_[nTabs - 1] - tabX_[0] + 14.f;
+    fillRound(barX, ty - 7.f, barW, th + 14.f, (th + 14.f) / 2, kSurface, 0.7f);
+    ringRound(barX, ty - 7.f, barW, th + 14.f, (th + 14.f) / 2, kBorder, 0.5f);
+    fillRound(pillX_.value - 4.f, ty - 4.f, pillW_.value + 8.f, th + 8.f, (th + 8.f) / 2, kCyan, 0.2f);
+    fillRound(pillX_.value, ty, pillW_.value, th, th / 2, kAccent, 1.f);
+    ringRound(pillX_.value, ty, pillW_.value, th, th / 2, kCyan, 0.6f);
     for (int i = 0; i < nTabs; ++i) {
-        bool active = i == tab_;
-        text_.draw(tabLabel(i), 24, tabX_[i] + tabW_[i] / 2, ty + 10, active ? kWhite : kMuted, 1.f, TextRenderer::Center);
+        const bool active = i == tab_;
+        const std::string lab = tabLabel(i);
+        float cx = tabX_[i] + tabW_[i] / 2;
+        if (tabKind(i) == K_FEATURED) {
+            cx += 11.f;
+            fillRound(cx - text_.width(lab, 24) / 2.f - 20.f, ty + th / 2 - 6.f, 12.f, 12.f, 6.f, kGold, 1.f);
+        }
+        text_.draw(lab, 24, cx, ty + 12.f, active ? kWhite : kBody, 1.f, TextRenderer::Center);
     }
 
 }
@@ -1069,7 +1165,7 @@ void Ui::drawGrid() {
                 text_.draw(lk, 17, lx + 36.f, ly + 5.f, kText, a, TextRenderer::Left);
             }
             if (g.featuredRank > 0) {
-                const std::string fl = "\xE2\x98\x85 " + (g.featuredLabel.empty() ? i18n::tr("ps4.tab.featured") : g.featuredLabel);
+                const std::string fl = g.featuredLabel.empty() ? i18n::tr("ps4.tab.featured") : g.featuredLabel;
                 drawBadge(fl, cxs + sz - 12.f - (text_.width(fl, 17) + 28.f), cys + sz - 12.f - 30.f, kOrange, a);
             }
             if (g.resource_type != "pkg") {
@@ -1099,7 +1195,7 @@ void Ui::drawStatus() {
     } else if (st == Catalog::State::Ready && games_.empty()) {
         text_.draw(i18n::tr("ps4.catalog_empty"), 36, W / 2.f, 500, kText, 1.f, TextRenderer::Center);
     } else if (!games_.empty() && filtered_.empty()) {
-        text_.draw(i18n::tr(tab_ == TAB_LIBRARY ? "ps4.library.empty" : tab_ == TAB_INSTALLED ? "ps4.none_installed" : tab_ == TAB_FEATURED ? "ps4.featured.empty" : "ps4.none_fw"), 30, W / 2.f, 500, kMuted, 1.f, TextRenderer::Center);
+        text_.draw(i18n::tr(tabKind(tab_) == K_LIBRARY ? "ps4.library.empty" : tabKind(tab_) == K_INSTALLED ? "ps4.none_installed" : tabKind(tab_) == K_FEATURED ? "ps4.featured.empty" : tabKind(tab_) == K_NEW ? "ps4.new.empty" : "ps4.empty"), 30, W / 2.f, 500, kMuted, 1.f, TextRenderer::Center);
     }
 }
 
@@ -1119,6 +1215,8 @@ void Ui::drawHints() {
     if (!alerts_.empty()) hints = {{{PsBtn::Cross}, i18n::tr("ps4.ok")}};
     else if (pairOpen_) hints = {{{PsBtn::Cross}, i18n::tr("ps4.add")}, {{PsBtn::Square}, i18n::tr("ps4.delete")},
                                  {{PsBtn::Options}, i18n::tr("ps4.validate")}, {{PsBtn::Circle}, i18n::tr("ps4.cancel")}};
+    else if (searchOpen_) hints = {{{PsBtn::Cross}, i18n::tr("ps4.search.type")}, {{PsBtn::Square}, i18n::tr("ps4.delete")}, {{PsBtn::Triangle}, i18n::tr("ps4.space")},
+                                   {{PsBtn::L1}, i18n::tr("ps4.search.clear_all")}, {{PsBtn::Options}, i18n::tr("ps4.validate")}};
     else if (modal_ == Modal::Region) hints = {{{PsBtn::Cross}, i18n::tr("ps4.confirm")}, {{PsBtn::Circle}, i18n::tr("ps4.cancel")}};
     else if (modal_ == Modal::Force) hints = {{{PsBtn::Cross}, i18n::tr("ps4.plugin.force")}, {{PsBtn::Circle}, i18n::tr("ps4.cancel")}};
     else if (settings_) hints = {{{PsBtn::Cross}, i18n::tr(setRow_ >= 2 ? "ps4.hint.select" : "ps4.settings.change")}, {{PsBtn::Circle}, i18n::tr("ps4.back")}};
@@ -1136,6 +1234,8 @@ void Ui::drawHints() {
     } else {
         hints = {{{PsBtn::L1, PsBtn::R1}, i18n::tr("ps4.tabs")}, {{PsBtn::Cross}, i18n::tr("ps4.details")},
                  {{PsBtn::Square}, i18n::tr("ps4.settings.title")}, {{PsBtn::Triangle}, i18n::tr("ps4.refresh")}};
+        hints.push_back({{}, i18n::tr("ps4.search.hint_main")});
+        if (!query_.empty()) hints.push_back({{PsBtn::Circle}, i18n::tr("ps4.search.clear")});
         if (upd_.state() == SelfUpdater::State::Ready) hints.push_back({{PsBtn::Options}, i18n::tr("ps4.update_store")});
     }
     float x = 96.f;
@@ -1526,6 +1626,35 @@ void Ui::drawPair() {
     if (working) text_.draw(i18n::tr("ps4.pair.working"), 24, x + pw / 2.f, y + ph - 70.f, kText, 0.6f + 0.4f * std::sin(time_ * 5.f), TextRenderer::Center);
     else if (!pairError_.empty()) text_.draw(pairError_, 22, x + pw / 2.f, y + ph - 70.f, kOrange, 1.f, TextRenderer::Center, (int)(pw - 2 * pad));
     else text_.draw(i18n::tr("ps4.pair.keys"), 20, x + pw / 2.f, y + ph - 66.f, kMuted, 1.f, TextRenderer::Center, (int)(pw - 2 * pad));
+}
+
+void Ui::drawSearch() {
+    if (!searchOpen_) return;
+    const float pw = 1160.f, ph = 700.f;
+    const float x = (W - pw) / 2.f, y = 176.f + (1020.f - 176.f - ph) / 2.f;
+    glassPanel(x, y, pw, ph, 30.f, true);
+    const float pad = 56.f;
+    text_.draw(i18n::tr("ps4.search"), 36, x + pad, y + 30.f, kText);
+    text_.draw(std::to_string(filtered_.size()) + " " + i18n::tr(filtered_.size() > 1 ? "ps4.title_other" : "ps4.title_one"), 22, x + pw - pad, y + 42.f, kMuted, 1.f, TextRenderer::Right);
+
+    const float fx = x + pad, fy = y + 96.f, fw = pw - 2 * pad, fh = 84.f;
+    fillRound(fx, fy, fw, fh, 22.f, kAccent, 0.9f);
+    fillRound(fx + 2.f, fy + 2.f, fw - 4.f, fh - 4.f, 20.f, kSurface, 0.97f);
+    if (query_.empty()) text_.draw(i18n::tr("ps4.search.ph"), 30, fx + 28.f, fy + 22.f, kMuted, 0.7f, TextRenderer::Left, (int)(fw - 60.f));
+    else {
+        text_.draw(query_, 38, fx + 28.f, fy + 16.f, kText, 1.f, TextRenderer::Left, (int)(fw - 80.f));
+        const float cw = (float)text_.width(query_, 38);
+        if (std::fmod(time_, 1.f) < 0.55f && cw < fw - 90.f) fillRound(fx + 32.f + cw, fy + 18.f, 4.f, 48.f, 2.f, kCyan, 1.f);
+    }
+
+    const float kw = 92.f, kg = 10.f, gx = x + (pw - (10 * kw + 9 * kg)) / 2.f, gy = y + 216.f, kh = 86.f;
+    for (int i = 0; i < 40; ++i) {
+        const float cx = gx + (i % 10) * (kw + kg), cy = gy + (i / 10) * (kh + kg);
+        const bool on = i == kbCursor_;
+        fillRound(cx, cy, kw, kh, 18.f, on ? kAccent : kBorder, on ? 1.f : 0.26f);
+        text_.draw(std::string(1, (char)std::toupper((unsigned char)kbChar(i))), 36, cx + kw / 2.f, cy + 20.f, on ? kWhite : kText, 1.f, TextRenderer::Center);
+    }
+    text_.draw(i18n::tr("ps4.search.keys"), 20, x + pw / 2.f, y + ph - 56.f, kMuted, 1.f, TextRenderer::Center, (int)(pw - 2 * pad));
 }
 
 void Ui::drawRelated() {

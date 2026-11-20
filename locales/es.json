@@ -973,5 +973,16 @@
   "vt.top.resources_other": "{n} recursos",
   "vt.top.profile": "Ver perfil",
   "vt.video.empty": "Pega un enlace de YouTube en el inspector.",
-  "vt.top.empty": "Aún no hay creadores que mostrar."
+  "vt.top.empty": "Aún no hay creadores que mostrar.",
+  "ps4.search": "Búsqueda",
+  "ps4.search.ph": "Escribe el nombre de un juego…",
+  "ps4.search.type": "Escribir",
+  "ps4.search.clear_all": "Borrar todo",
+  "ps4.search.clear": "Borrar búsqueda",
+  "ps4.search.hint_main": "Panel táctil: buscar",
+  "ps4.space": "Espacio",
+  "ps4.search.keys": "Cruz: escribir · Cuadrado: borrar · Triángulo: espacio · L1: borrar todo · Panel táctil / Options: cerrar",
+  "ps4.tab.all": "Todo",
+  "ps4.tab.new": "Nuevo",
+  "ps4.new.empty": "Nada nuevo por ahora"
 }

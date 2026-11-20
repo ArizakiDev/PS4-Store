@@ -31,10 +31,13 @@ class Ui {
 public:
     static constexpr int W = 1920;
     static constexpr int H = 1080;
-    static constexpr int TABS = 8;
-    static constexpr int TAB_FEATURED = 1;
-    static constexpr int TAB_INSTALLED = 6;
-    static constexpr int TAB_LIBRARY = 7;
+    static constexpr int TABS = 6;
+    enum TabKind { K_ALL, K_NEW, K_FEATURED, K_INSTALLED, K_LIBRARY, K_SETTINGS };
+    TabKind tabKind(int i) const {
+        static const TabKind t[TABS] = {K_ALL, K_NEW, K_FEATURED, K_INSTALLED, K_LIBRARY, K_SETTINGS};
+        if (!remote_.paired() && i >= 4) return K_SETTINGS;
+        return t[std::max(0, std::min(TABS - 1, i))];
+    }
 
     Ui(SDL_Renderer* r, TextRenderer& text, ImageCache& images, Catalog& catalog, Downloader& dl, Input& input,
        const dns_block::Guard& dns, installed::Manager& inst, SelfUpdater& upd, plugin::Manager& plugins, payload::Sender& payloads, RemoteSync& remote);
@@ -71,6 +74,8 @@ private:
     void drawRegionModal();
     void drawSettings();
     void drawPair();
+    void drawSearch();
+    bool matchesQuery(const Game& g) const;
     std::string buildHeartbeat() const;
     void handleCommand(const RemoteSync::Command& c);
     void startRemote(const RemoteSync::Request& rq);
@@ -153,6 +158,9 @@ private:
     bool pairOpen_ = false, pairWaiting_ = false;
     std::string pairCode_, pairError_;
     int pairCursor_ = 0;
+    bool searchOpen_ = false;
+    std::string query_;
+    int kbCursor_ = 0;
     float heartbeatTimer_ = 0.f;
     bool applyRequested_ = false;
     bool cmdUninstallActive_ = false;

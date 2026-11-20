@@ -18,7 +18,7 @@ namespace {
 enum : uint32_t {
     PAD_OPTIONS = 0x00000008, PAD_UP = 0x00000010, PAD_RIGHT = 0x00000020, PAD_DOWN = 0x00000040, PAD_LEFT = 0x00000080,
     PAD_L1 = 0x00000400, PAD_R1 = 0x00000800, PAD_TRIANGLE = 0x00001000, PAD_CIRCLE = 0x00002000,
-    PAD_CROSS = 0x00004000, PAD_SQUARE = 0x00008000,
+    PAD_CROSS = 0x00004000, PAD_SQUARE = 0x00008000, PAD_TOUCHPAD = 0x00100000,
 };
 
 struct PadRaw {
@@ -70,6 +70,7 @@ void Input::update(float dt) {
             down_[B_L1] = b & PAD_L1;
             down_[B_R1] = b & PAD_R1;
             down_[B_OPTIONS] = b & PAD_OPTIONS;
+            down_[B_TOUCHPAD] = b & PAD_TOUCHPAD;
         }
     }
 

@@ -1198,5 +1198,16 @@
   "wb.el.footer_help_link": "Footer: Help link",
   "wb.el.footer_api_link": "Footer: API link",
   "vt.video.empty": "Paste a YouTube link in the inspector.",
-  "vt.top.empty": "No creators to show yet."
+  "vt.top.empty": "No creators to show yet.",
+  "ps4.search": "Search",
+  "ps4.search.ph": "Type a game name…",
+  "ps4.search.type": "Type",
+  "ps4.search.clear_all": "Clear all",
+  "ps4.search.clear": "Clear search",
+  "ps4.search.hint_main": "Touchpad: search",
+  "ps4.space": "Space",
+  "ps4.search.keys": "Cross: type · Square: delete · Triangle: space · L1: clear all · Touchpad / Options: close",
+  "ps4.tab.all": "All",
+  "ps4.tab.new": "New",
+  "ps4.new.empty": "Nothing new for now"
 }
