@@ -1,0 +1,12 @@
+node_modules/
+.env
+.session-secret
+*.log
+server/data/
+server/public/uploads/
+server/public/store/*.pkg
+discord-bot/data/
+ps4-client/build/
+*.pkg
+*.elf
+*.oelf

@@ -1,0 +1,6 @@
+Placez ici le fichier PS4Store.pkg (genere par ps4-client\build.bat).
+
+Il sera propose au telechargement sur la page d'accueil du site :
+    /store/PS4Store.pkg
+
+Tant que le fichier est absent, le bouton de telechargement reste desactive.

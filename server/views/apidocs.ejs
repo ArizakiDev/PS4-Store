@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <%- include('partials/head', { title: t('api.title') + ' — PS4Store', description: t('api.desc') }) %>
+</head>
+<body class="page-apidocs">
+
+  <%- include('partials/nav', { active: 'api' }) %>
+
+  <main class="page">
+    <div class="wrap">
+      <div class="head">
+        <p class="eyebrow"><%= t('api.eyebrow') %></p>
+        <h1><%= t('api.title') %></h1>
+        <p><%= t('api.sub') %></p>
+      </div>
+
+      <%
+        var endpoints = [
+          { m: 'GET', p: '/api/games', k: 'games', ex: '[\n  {\n    "id": "6f1c…",\n    "title_id": "CUSA00000",\n    "titre": "Mon jeu",\n    "version": "1.05",\n    "firmware_min": "9.00",\n    "categorie": "Jeux",\n    "resource_type": "pkg",\n    "size": "12,4 Go",\n    "icon_url": "' + origin + '/uploads/covers/….png",\n    "pkg_url": "' + origin + '/dl/6f1c…/CUSA00000.pkg",\n    "author_name": "Arizaki",\n    "likes": 12,\n    "downloads_count": 340,\n    "fw_reliability": 92,\n    "updated_at": "2026-11-16T14:16:06.914Z"\n  }\n]' },
+          { m: 'GET', p: '/api/client-version', k: 'client', ex: '{\n  "version": "01.34",\n  "pkg_url": "' + origin + '/store/PS4Store.pkg",\n  "file_size": 7536640,\n  "notes": "Notes de version…",\n  "updated_at": "2026-11-17T01:07:00.000Z",\n  "history": [ { "version": "01.33", "changelog": "…" } ]\n}' },
+          { m: 'GET', p: '/api/stats', k: 'stats', ex: '{\n  "resources": 42,\n  "by_type": { "pkg": 20, "update": 5, "dlc": 3, "plugin": 10, "payload": 4 },\n  "members": 128,\n  "consoles": 61,\n  "downloads": 5120,\n  "open_requests": 7,\n  "client_version": "01.34",\n  "generated_at": "2026-11-17T12:00:00.000Z"\n}' },
+          { m: 'GET', p: '/api/requests?status=open', k: 'requests', ex: '[\n  {\n    "id": "b1a2…",\n    "title": "Mon jeu préféré",\n    "title_id": "CUSA12345",\n    "resource_type": "pkg",\n    "votes": 14,\n    "status": "open",\n    "created_at": "2026-11-10T09:30:00.000Z"\n  }\n]' }
+        ];
+      %>
+      <% endpoints.forEach(function (e) { %>
+        <section class="ep glass">
+          <div class="ep-head"><span class="ep-method"><%= e.m %></span><code class="ep-path"><%= e.p %></code></div>
+          <p><%= t('api.ep.' + e.k) %></p>
+          <details class="ep-ex" open>
+            <summary><%= t('api.example') %></summary>
+            <pre><code><%= e.ex %></code></pre>
+          </details>
+          <p class="ep-try"><code>curl <%= origin %><%= e.p %></code> · <a href="<%= e.p %>" target="_blank" rel="noopener"><%= t('api.try') %></a></p>
+        </section>
+      <% }) %>
+
+      <p class="ep-note"><%= t('api.note') %></p>
+    </div>
+  </main>
+
+  <%- include('partials/foot') %>
+</body>
+</html>

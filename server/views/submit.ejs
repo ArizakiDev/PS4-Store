@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <%- include('partials/head', { title: t('submit.title') + ' — PS4Store', noindex: true }) %>
+</head>
+<body class="page-submit">
+  <%- include('partials/nav', { active: '' }) %>
+  <main class="wrap submit-page">
+    <h1><%= t('submit.title') %></h1>
+    <p class="auth-sub"><%= t('submit.sub') %></p>
+
+    <% if (errors.length) { %><div class="auth-error" role="alert"><% errors.forEach(function (e) { %><div><%= e %></div><% }) %></div><% } %>
+
+    <form class="submit-card glass" method="post" action="/proposer" id="form-submit" autocomplete="off">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+
+      <div class="grid2">
+        <label class="field"><%= t('dash.main.titleid') %>
+          <input class="input" name="title_id" id="f-titleid" value="<%= values.title_id || '' %>" placeholder="<%= t('dash.main.titleid.ph') %>" maxlength="80" spellcheck="false">
+        </label>
+        <label class="field"><%= t('dash.f.version') %>
+          <input class="input" name="version" value="<%= values.version || '1.00' %>" placeholder="1.00" maxlength="16" required>
+        </label>
+      </div>
+
+      <div>
+        <label class="field"><%= t('dash.f.link.pkg') %>
+          <input class="input" name="pkg_url" id="pkg-url" type="url" value="<%= values.pkg_url || '' %>" placeholder="https://drive.google.com/file/d/…/view" maxlength="1000" required>
+        </label>
+      </div>
+
+      <div class="row-btns">
+        <button class="btn ghost" type="button" id="media-fetch"><%= t('dash.media.fetch') %></button>
+        <span class="hint" id="media-status" role="status" aria-live="polite"></span>
+      </div>
+
+      <details class="advanced" id="advanced" <%= (values.titre || values.description) ? 'open' : '' %>>
+        <summary><%= t('dash.advanced') %></summary>
+        <div class="advanced-body">
+          <label class="field"><%= t('dash.f.type') %>
+            <select class="input" name="resource_type" id="f-type">
+              <% resourceTypes.forEach(function (rt) { %><option value="<%= rt %>"<%= values.resource_type === rt ? ' selected' : '' %>><%= t('type.' + rt) %></option><% }) %>
+            </select>
+          </label>
+          <label class="field"><%= t('dash.f.title') %><input class="input" name="titre" value="<%= values.titre || '' %>" maxlength="80"></label>
+          <label class="field"><%= t('dash.f.desc') %><textarea class="input" name="description" maxlength="2000"><%= values.description || '' %></textarea></label>
+          <div class="grid2">
+            <label class="field"><%= t('dash.f.firmware') %><select class="input" name="firmware_min"><% firmwares.forEach(function (fw) { %><option value="<%= fw %>"<%= values.firmware_min === fw ? ' selected' : '' %>><%= fw %></option><% }) %></select></label>
+            <label class="field"><%= t('dash.f.category') %><select class="input" name="categorie"><% categories.forEach(function (c) { %><option value="<%= c %>"<%= values.categorie === c ? ' selected' : '' %>><%= catLabel(c) %></option><% }) %></select></label>
+          </div>
+          <label class="field"><%= t('dash.f.size') %><input class="input" name="size" value="<%= values.size || '' %>" placeholder="420 Mo" maxlength="20"></label>
+          <label class="field"><%= t('dash.f.icon') %><input class="input" name="icon_url" id="icon-url" value="<%= values.icon_url || '' %>" type="text" inputmode="url" maxlength="500"></label>
+
+          <label class="field" id="parent-field" hidden><%= t('dash.f.parent') %>
+            <select class="input" name="parent_title_id">
+              <option value=""><%= t('dash.f.parent.none') %></option>
+              <% parentOptions.forEach(function (p) { %><option value="<%= p.title_id %>"<%= values.parent_title_id === p.title_id ? ' selected' : '' %>><%= p.titre %> (<%= p.title_id %>)</option><% }) %>
+            </select>
+            <span class="hint"><%= t('dash.f.parent.hint') %></span>
+          </label>
+
+          <div id="mod-fields" hidden style="display:none;gap:14px">
+            <div class="grid2">
+              <label class="field"><%= t('dash.f.regions') %>
+                <select class="input" name="pc_regions" id="pc-regions">
+                  <option value="BOTH"><%= t('dash.region.BOTH') %></option><option value="EU"><%= t('dash.region.EU') %></option><option value="US"><%= t('dash.region.US') %></option>
+                </select>
+              </label>
+              <label class="field"><%= t('dash.f.target') %>
+                <select class="input" name="pc_target"><option value="plugin"><%= t('target.plugin') %></option><option value="cheat"><%= t('target.cheat') %></option><option value="patch"><%= t('target.patch') %></option><option value="payload"><%= t('target.payload') %></option></select>
+              </label>
+            </div>
+            <div class="grid2" data-region="eu">
+              <label class="field"><%= t('dash.pc.region.EU') %> — <%= t('dash.pc.titleid') %><input class="input" name="pc_eu_title_id" placeholder="CUSA00411" maxlength="9"></label>
+              <label class="field"><%= t('dash.pc.filename') %><input class="input" name="pc_eu_filename" placeholder="mod.prx" maxlength="64"></label>
+            </div>
+            <div class="grid2" data-region="us">
+              <label class="field"><%= t('dash.pc.region.US') %> — <%= t('dash.pc.titleid') %><input class="input" name="pc_us_title_id" placeholder="CUSA00419" maxlength="9"></label>
+              <label class="field"><%= t('dash.pc.filename') %><input class="input" name="pc_us_filename" placeholder="mod.prx" maxlength="64"></label>
+            </div>
+          </div>
+
+          <label class="field"><%= t('dash.yt.label') %><input class="input" name="youtube_url" id="yt-url" value="<%= values.youtube_url || '' %>" type="text" inputmode="url" maxlength="300"></label>
+          <label class="field"><%= t('dash.shots.label') %><textarea class="input" name="screenshots" id="shots-field" spellcheck="false"><%= values.screenshots || '' %></textarea><span class="hint"><%= t('dash.shots.hint') %></span></label>
+        </div>
+      </details>
+
+      <p class="hint"><%= t('submit.note') %></p>
+      <div class="row-btns"><button class="btn" type="submit"><%= t('submit.button') %></button></div>
+    </form>
+  </main>
+  <%- include('partials/foot') %>
+  <% var jsKeys = ['dash.js.media_running', 'dash.js.media_done', 'dash.js.media_none', 'dash.js.media_failed', 'dash.js.media_need', 'dash.js.rel_progress', 'dash.js.rel_done', 'dash.js.rel_failed', 'dash.js.net_error'];
+     var jsT = {}; jsKeys.forEach(function (k) { jsT[k] = t(k); }); %>
+  <script type="application/json" id="data-i18n"><%- JSON.stringify(jsT).replace(/</g, '\\u003c') %></script>
+  <script src="/js/submit.js?v=<%= assetV('js/submit.js') %>"></script>
+</body>
+</html>

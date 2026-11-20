@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <%- include('partials/head', { title: t(titleKey) + ' — PS4Store', noindex: true }) %>
+</head>
+<body class="page-notfound">
+  <%- include('partials/nav', { active: '' }) %>
+  <main class="nf">
+    <div>
+      <h1><%= t(titleKey) %></h1>
+      <p><%= t(typeof textKey !== 'undefined' ? textKey : 'notfound.text') %></p>
+      <a class="btn" href="<%= backHref %>"><%= t(backKey) %></a>
+    </div>
+  </main>
+  <%- include('partials/foot') %>
+</body>
+</html>

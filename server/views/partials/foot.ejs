@@ -1,0 +1,5 @@
+<footer class="footer">
+  <div class="wrap"><% if (!isHidden('footer_line1')) { %><span<%- tg('footer_line1') %>><%= t('footer.line1') %></span><% } %><% if (!isHidden('footer_line2')) { %><span<%- tg('footer_line2') %>><%= t('footer.line2') %></span><% } %><% if (!isHidden('footer_help_link')) { %><a class="foot-help" href="/status"<%- tg('footer_help_link') %>><%= t('footer.help') %></a><% } %><% if (!isHidden('footer_api_link')) { %><a class="foot-help" href="/api-docs"<%- tg('footer_api_link') %>><%= t('footer.api') %></a><% } %></div>
+</footer>
+<script src="/js/site.js?v=<%= assetV('js/site.js') %>"></script>
+<% if (typeof editMode !== 'undefined' && editMode) { %><script src="/js/builder-frame.js?v=<%= assetV('js/builder-frame.js') %>"></script><% } %>

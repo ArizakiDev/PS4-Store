@@ -1,0 +1,24 @@
+<%
+  var colMode = typeof mode !== 'undefined' ? mode : 'link';
+%>
+<% if (collections && collections.length) { %>
+<section class="collections" aria-label="<%= t('col.title') %>">
+  <div class="col-head"><h2><%= t('col.title') %></h2></div>
+  <div class="col-row" id="col-row">
+    <% collections.forEach(function (c) { %>
+      <% if (colMode === 'filter') { %>
+        <button type="button" class="col-card glass" data-col="<%= c.id %>" data-ids="<%= JSON.stringify(c.ids) %>" aria-pressed="false">
+      <% } else { %>
+        <a class="col-card glass" href="/catalogue?collection=<%= c.id %>">
+      <% } %>
+        <span class="col-covers" aria-hidden="true"><% c.covers.forEach(function (src, i) { %><img src="<%= src %>" alt="" width="56" height="56" loading="lazy" style="--i:<%= i %>"><% }) %></span>
+        <span class="col-body">
+          <span class="col-top"><strong><%= c.title %></strong><% if (c.badge) { %><span class="pill accent"><%= c.badge %></span><% } %></span>
+          <% if (c.description) { %><span class="col-desc"><%= c.description %></span><% } %>
+          <span class="col-count"><%= tn('col.count', c.count) %></span>
+        </span>
+      <% if (colMode === 'filter') { %></button><% } else { %></a><% } %>
+    <% }) %>
+  </div>
+</section>
+<% } %>

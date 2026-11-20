@@ -1,0 +1,3 @@
+<%
+  var bl = typeof list !== 'undefined' && list ? list : [];
+%><% bl.forEach(function (b) { %><span class="ubadge ubadge-<%= b %>" title="<%= t('badge.' + b + '.hint') %>"><%= t('badge.' + b) %></span><% }) %>

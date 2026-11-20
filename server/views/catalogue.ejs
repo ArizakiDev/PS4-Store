@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <%- include('partials/head', { title: t('catalogue.title') + ' — PS4Store', description: t('catalogue.desc') }) %>
+</head>
+<body class="page-catalogue">
+
+  <%- include('partials/nav', { active: 'catalogue' }) %>
+
+  <main class="page">
+    <div class="wrap">
+      <% if (!isHidden('catalogue_head')) { %><div class="head"<%- tg('catalogue_head') %>>
+        <p class="eyebrow"><%= t('catalogue.eyebrow') %></p>
+        <h1><%= t('catalogue.title') %></h1>
+        <p><span class="count" id="count"><%= games.length %></span> <%= tn('catalogue.sub', games.length) %></p>
+      </div><% } %>
+
+      <% if (isPreview) { %><div class="preview-flag">Aperçu non publié</div><% } %>
+    </div>
+    <%- include('partials/vitrine', { vitrine: vitrine }) %>
+    <div class="wrap">
+      <% if (!isHidden('catalogue_collections')) { %><div<%- tg('catalogue_collections') %>><%- include('partials/collections', { collections: collections, mode: 'filter' }) %></div><% } %>
+
+      <div class="controls">
+        <div class="search">
+          <svg class="loupe" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="9" r="6"/><path d="m14 14 4 4"/></svg>
+          <label class="sr-only" for="q"><%= t('catalogue.search.label') %></label>
+          <input id="q" type="search" placeholder="<%= t('catalogue.search.placeholder') %>" autocomplete="off" spellcheck="false" value="<%= q %>">
+          <button class="clear" id="clear" type="button" aria-label="<%= t('catalogue.search.clear') %>"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m2 2 8 8M10 2l-8 8"/></svg></button>
+          <kbd class="kbd" id="kbd" aria-hidden="true">/</kbd>
+        </div>
+
+        <div class="filters">
+          <div class="filters-row">
+            <div class="seg-scroll">
+              <div class="seg no-anim" id="seg-fw" role="group" aria-label="<%= t('filter.firmware') %>">
+                <span class="seg-pill" aria-hidden="true"></span>
+                <button type="button" data-value="all" aria-pressed="true"><%= t('filter.all') %></button>
+                <% firmwares.forEach(function (fw) { %><button type="button" data-value="<%= fw %>" aria-pressed="false"><%= fw %>+</button><% }) %>
+              </div>
+            </div>
+            <div class="seg-scroll">
+              <div class="seg no-anim" id="seg-cat" role="group" aria-label="<%= t('filter.category') %>">
+                <span class="seg-pill" aria-hidden="true"></span>
+                <button type="button" data-value="all" aria-pressed="true"><%= t('filter.all.f') %></button>
+                <% categories.forEach(function (cat) { %><button type="button" data-value="<%= cat %>" aria-pressed="false"><%= catLabel(cat) %></button><% }) %>
+              </div>
+            </div>
+          </div>
+          <div class="filters-row">
+          <div class="seg-scroll">
+            <div class="seg no-anim" id="seg-sort" role="group" aria-label="<%= t('filter.sort') %>">
+              <span class="seg-pill" aria-hidden="true"></span>
+              <button type="button" data-value="recent" aria-pressed="true"><%= t('sort.recent') %></button>
+              <button type="button" data-value="downloads" aria-pressed="false"><%= t('sort.downloads') %></button>
+              <button type="button" data-value="likes" aria-pressed="false"><%= t('sort.likes') %></button>
+            </div>
+          </div>
+          <div class="seg-scroll">
+            <div class="seg no-anim" id="seg-type" role="group" aria-label="<%= t('filter.type') %>">
+              <span class="seg-pill" aria-hidden="true"></span>
+              <button type="button" data-value="all" aria-pressed="true"><%= t('filter.all') %></button>
+              <% resourceTypes.forEach(function (rt) { %><button type="button" data-value="<%= rt %>" aria-pressed="false"><%= t('type.' + rt + '.plural') %></button><% }) %>
+            </div>
+          </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid" id="grid">
+        <% games.forEach(function (g) { %><%- include('partials/card', { g: g, showDesc: true }) %><% }) %>
+      </div>
+
+      <div class="empty glass" id="empty" <%= games.length ? 'hidden' : '' %>>
+        <strong><%= games.length ? t('catalogue.noresult.title') : t('home.empty.title') %></strong>
+        <%= games.length ? t('catalogue.noresult.text') : t('home.empty.text') %>
+      </div>
+    </div>
+  </main>
+
+  <%- include('partials/foot') %>
+  <script>
+    (function () {
+      'use strict';
+      var grid = document.getElementById('grid');
+      var cards = Array.prototype.slice.call(grid.querySelectorAll('.card'));
+      var empty = document.getElementById('empty');
+      var count = document.getElementById('count');
+      var input = document.getElementById('q');
+      var clear = document.getElementById('clear');
+      var total = cards.length;
+      var grid0 = grid;
+      var INIT = <%- JSON.stringify(initial).replace(/</g, '\u003c') %>;
+      var colBtns = Array.prototype.slice.call(document.querySelectorAll('.col-card[data-col]'));
+      var colIds = {};
+      colBtns.forEach(function (b) { try { colIds[b.dataset.col] = JSON.parse(b.dataset.ids); } catch (e) { colIds[b.dataset.col] = []; } });
+      var VALID = { sort: ['recent', 'downloads', 'likes'] };
+      var state = { fw: INIT.fw || 'all', cat: INIT.cat || 'all', type: INIT.type || 'all', sort: VALID.sort.indexOf(INIT.sort) !== -1 ? INIT.sort : 'recent', col: colIds[INIT.collection] ? INIT.collection : '', q: PS4.fold(input.value).trim() };
+      ['fw', 'cat', 'type', 'sort'].forEach(function (k) {
+        var seg = document.getElementById('seg-' + k);
+        if (!seg || !seg.querySelector('button[data-value="' + state[k] + '"]')) state[k] = k === 'sort' ? 'recent' : 'all';
+        Array.prototype.forEach.call(seg ? seg.querySelectorAll('button') : [], function (b) { b.setAttribute('aria-pressed', String(b.dataset.value === state[k])); });
+      });
+      colBtns.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.col === state.col)); });
+
+      function matches(card) {
+        if (state.fw !== 'all' && parseFloat(card.dataset.fw) > parseFloat(state.fw)) return false;
+        if (state.cat !== 'all' && card.dataset.cat !== state.cat) return false;
+        if (state.type !== 'all' && card.dataset.type !== state.type) return false;
+        if (state.col && colIds[state.col].indexOf(card.dataset.id) === -1) return false;
+        if (state.q) { var hay = card.dataset.search; return state.q.split(/\s+/).every(function (w) { return hay.indexOf(w) !== -1; }); }
+        return true;
+      }
+      var SORTS = {
+        recent: function (a, b) { return Number(b.dataset.ts) - Number(a.dataset.ts); },
+        downloads: function (a, b) { return Number(b.dataset.dl) - Number(a.dataset.dl) || Number(b.dataset.ts) - Number(a.dataset.ts); },
+        likes: function (a, b) { return Number(b.dataset.likes) - Number(a.dataset.likes) || Number(b.dataset.ts) - Number(a.dataset.ts); }
+      };
+      function syncUrl() {
+        var url = new URL(location.href), p = url.searchParams;
+        function put(k, v, def) { if (v && v !== def) p.set(k, v); else p.delete(k); }
+        put('q', input.value.trim(), ''); put('fw', state.fw, 'all'); put('cat', state.cat, 'all'); put('type', state.type, 'all'); put('sort', state.sort, 'recent'); put('collection', state.col, '');
+        history.replaceState(null, '', url);
+      }
+      function apply() {
+        var visible = [];
+        cards.sort(SORTS[state.sort]).forEach(function (card) { grid.appendChild(card); var show = matches(card); card.hidden = !show; if (show) visible.push(card); });
+        if (total) {
+          empty.hidden = visible.length > 0;
+          var filtering = state.q || state.fw !== 'all' || state.cat !== 'all' || state.type !== 'all' || state.col;
+          count.textContent = filtering ? visible.length + ' / ' + total : total;
+        }
+        syncUrl();
+        return visible;
+      }
+      var timer = null;
+      function refresh(animate) {
+        if (PS4.reduceMotion || !animate) { PS4.reveal(apply()); return; }
+        grid.classList.add('is-switching');
+        clearTimeout(timer);
+        timer = setTimeout(function () { var v = apply(); void grid.offsetWidth; grid.classList.remove('is-switching'); PS4.reveal(v); }, 220);
+      }
+      PS4.seg('seg-fw', function (v) { state.fw = v; refresh(true); });
+      PS4.seg('seg-cat', function (v) { state.cat = v; refresh(true); });
+      PS4.seg('seg-type', function (v) { state.type = v; refresh(true); });
+      PS4.seg('seg-sort', function (v) { state.sort = v; refresh(true); });
+      colBtns.forEach(function (b) {
+        b.addEventListener('click', function () {
+          state.col = state.col === b.dataset.col ? '' : b.dataset.col;
+          colBtns.forEach(function (x) { x.setAttribute('aria-pressed', String(x.dataset.col === state.col)); });
+          refresh(true);
+        });
+      });
+
+      var typing = null;
+      input.addEventListener('input', function () {
+        clear.classList.toggle('is-on', input.value.length > 0);
+        clearTimeout(typing);
+        typing = setTimeout(function () {
+          state.q = PS4.fold(input.value).trim();
+          var v = apply();
+          PS4.reveal(v.filter(function (c) { return !c.classList.contains('is-in'); }));
+        }, 60);
+      });
+      clear.addEventListener('click', function () { input.value = ''; input.dispatchEvent(new Event('input')); input.focus(); });
+      clear.classList.toggle('is-on', input.value.length > 0);
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === '/' && document.activeElement !== input && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) {
+          e.preventDefault(); input.focus(); input.select();
+        } else if (e.key === 'Escape' && document.activeElement === input) { input.blur(); }
+      });
+
+      refresh(false);
+    })();
+  </script>
+</body>
+</html>

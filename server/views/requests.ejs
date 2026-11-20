@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <%- include('partials/head', { title: t('req.title') + ' — PS4Store', description: t('req.desc') }) %>
+</head>
+<body class="page-requests">
+
+  <%- include('partials/nav', { active: 'requests' }) %>
+
+  <main class="page">
+    <%- include('partials/vitrine', { vitrine: vitrineOf('demandes_sections') }) %>
+    <div class="wrap">
+      <% if (!isHidden('requests_head')) { %><div class="head"<%- tg('requests_head') %>>
+        <p class="eyebrow"><%= t('req.eyebrow') %></p>
+        <h1><%= t('req.title') %></h1>
+        <p><%= t('req.sub') %></p>
+      </div><% } %>
+
+      <% if (me && !isHidden('requests_form')) { %>
+        <form class="req-form glass" id="req-form" autocomplete="off"<%- tg('requests_form') %>>
+          <h2><%= t('req.form.title') %></h2>
+          <div class="req-grid">
+            <label class="field"><%= t('req.f.name') %><input class="input" name="title" maxlength="80" required placeholder="<%= t('req.f.name.ph') %>"></label>
+            <label class="field"><%= t('req.f.titleid') %><input class="input" name="title_id" maxlength="9" placeholder="CUSA00000" style="text-transform:uppercase"></label>
+            <label class="field"><%= t('req.f.type') %>
+              <select class="input" name="resource_type">
+                <option value="pkg"><%= t('type.pkg') %></option>
+                <option value="plugin"><%= t('type.plugin') %></option>
+                <option value="payload"><%= t('type.payload') %></option>
+              </select>
+            </label>
+          </div>
+          <label class="field"><%= t('req.f.notes') %><textarea class="input" name="notes" maxlength="300" rows="2" placeholder="<%= t('req.f.notes.ph') %>"></textarea></label>
+          <div class="req-foot">
+            <span class="req-msg" id="req-msg" role="status" aria-live="polite"><%= t('req.quota', { n: mine, max: maxOpen }) %></span>
+            <button class="btn" type="submit"><%= t('req.submit') %></button>
+          </div>
+        </form>
+      <% } else if (!me) { %>
+        <p class="req-login glass"><a href="/auth/discord?next=<%= encodeURIComponent(currentPath) %>"><%= t('req.login') %></a></p>
+      <% } %>
+
+      <h2 class="req-h"><%= t('req.open') %> <span class="pill"><%= open.length %></span></h2>
+      <div class="req-list" id="req-list">
+        <% if (!open.length) { %><div class="empty glass"><strong><%= t('req.empty.title') %></strong><%= t('req.empty.text') %></div><% } %>
+        <% open.forEach(function (r) { %>
+          <article class="req-item glass" data-id="<%= r.id %>">
+            <button type="button" class="req-vote<%= r.voted ? ' is-on' : '' %>" data-vote="<%= r.id %>" aria-pressed="<%= r.voted %>" aria-label="<%= t('req.vote') %>">
+              <svg viewBox="0 0 20 20" aria-hidden="true" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 16V5M5 9.5 10 4.5l5 5"/></svg>
+              <span class="req-count"><%= r.votes %></span>
+              <span class="req-vote-l"><%= t('req.vote') %></span>
+            </button>
+            <div class="req-main">
+              <h3><%= r.title %></h3>
+              <div class="req-meta">
+                <span class="pill accent"><%= t('type.' + r.resource_type) %></span>
+                <% if (r.title_id) { %><span class="pill"><%= r.title_id %></span><% } %>
+                <span><%= t('req.by', { name: r.author_name }) %></span><span><%= fmtDate(r.created_at) %></span>
+              </div>
+              <% if (r.notes) { %><p class="req-notes"><%= r.notes %></p><% } %>
+            </div>
+          </article>
+        <% }) %>
+      </div>
+
+      <% if (done.length) { %>
+        <h2 class="req-h"><%= t('req.done') %></h2>
+        <div class="req-list">
+          <% done.forEach(function (r) { %>
+            <article class="req-item done glass">
+              <span class="req-ok" aria-hidden="true"><svg viewBox="0 0 14 14" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m2.5 7.5 3 3 6-6.5"/></svg></span>
+              <div class="req-main">
+                <h3><%= r.title %></h3>
+                <div class="req-meta">
+                  <span class="pill accent"><%= t('type.' + r.resource_type) %></span>
+                  <span><%= tn('req.votes', r.votes) %></span>
+                  <% if (r.linked) { %><a href="/jeu/<%= r.linked.id %>"><%= t('req.available', { title: r.linked.titre }) %></a><% } %>
+                </div>
+              </div>
+            </article>
+          <% }) %>
+        </div>
+      <% } %>
+    </div>
+  </main>
+
+  <%- include('partials/foot') %>
+  <script>
+    (function () {
+      'use strict';
+      var meta = document.querySelector('meta[name="csrf-token"]');
+      var token = meta ? meta.getAttribute('content') : '';
+      var ERR = <%- JSON.stringify(t('common.error')) %>;
+      function post(url, body) {
+        return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': token, 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); });
+      }
+      function login() { location.href = '/auth/discord?next=' + encodeURIComponent(location.pathname); }
+
+      var list = document.getElementById('req-list');
+      list.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-vote]'); if (!b) return;
+        if (!token) { login(); return; }
+        b.disabled = true;
+        post('/api/requests/' + b.dataset.vote + '/vote').then(function (res) {
+          if (res.status === 401) { login(); return; }
+          if (!res.ok) return;
+          b.classList.toggle('is-on', res.data.voted); b.setAttribute('aria-pressed', String(res.data.voted));
+          b.querySelector('.req-count').textContent = res.data.votes;
+        }).catch(function () {}).then(function () { b.disabled = false; });
+      });
+
+      var form = document.getElementById('req-form');
+      if (form) form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var out = document.getElementById('req-msg'), btn = form.querySelector('button[type=submit]');
+        var body = {}; new FormData(form).forEach(function (v, k) { body[k] = v; });
+        btn.disabled = true;
+        post('/api/requests', body).then(function (res) {
+          if (res.status === 401) { login(); return; }
+          if (!res.ok) { out.textContent = res.data.erreur || ERR; btn.disabled = false; return; }
+          location.reload();
+        }).catch(function () { out.textContent = ERR; btn.disabled = false; });
+      });
+    })();
+  </script>
+</body>
+</html>

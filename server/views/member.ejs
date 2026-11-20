@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <%- include('partials/head', { title: t('creator.page.title', { name: profile.display_name }), description: (profile.bio || t('creator.page.desc', { name: profile.display_name })).slice(0, 160) }) %>
+</head>
+<body class="page-member">
+
+  <%- include('partials/nav', { active: 'catalogue' }) %>
+  <%
+    var roleKey = memberRole === 'user' ? 'member' : memberRole;
+    var showLib = libraryShown && library.length;
+    var firstTab = resources.length ? 'resources' : favorites.length ? 'favorites' : showLib ? 'library' : 'activity';
+  %>
+
+  <main class="page">
+    <div class="wrap">
+      <section class="profile-hero">
+        <div class="banner" aria-hidden="true"></div>
+        <div class="ph-body">
+          <span class="avatar ph-avatar" style="--size:104px;font-size:36px"><%= initials(profile.display_name) %><% if (profile.avatar_url) { %><img src="<%= profile.avatar_url %>" alt="" width="104" height="104" decoding="async"><% } %></span>
+          <div class="ph-info">
+            <div class="who">
+              <h1><%= profile.display_name %></h1>
+              <span class="role-badge role-<%= roleKey %>"><%= t('role.' + roleKey) %></span>
+              <%- include('partials/badges', { list: badges }) %>
+            </div>
+            <p class="since">@<%= profile.username %> · <%= t('creator.since', { date: fmtDate(profile.created_at) }) %></p>
+            <% if (profile.bio) { %><p class="bio"><%= profile.bio %></p><% } %>
+            <% if ((profile.socials && profile.socials.length) || profile.discord_tag) { %>
+              <div class="socials">
+                <% if (profile.discord_tag) { %><span class="pill">Discord · <%= profile.discord_tag %></span><% } %>
+                <% (profile.socials || []).forEach(function (sc) { %><a class="pill" href="<%= sc.url %>" target="_blank" rel="noopener noreferrer nofollow"><%= sc.label %></a><% }) %>
+              </div>
+            <% } %>
+            <% if (playing) { %><p class="ph-playing"><span class="dot-live" aria-hidden="true"></span><%= t('member.playing', { name: playing.name }) %></p><% } %>
+          </div>
+          <div class="ph-side">
+            <% if (isSelf) { %>
+              <a class="btn ph-edit" href="/mon-compte?edit=1"><%= t('acc2.edit_profile') %></a>
+            <% } else if (canFollow) { %>
+              <button type="button" class="btn ph-follow<%= isFollowing ? ' is-on' : '' %>" id="follow-btn" data-id="<%= memberId %>" data-on="<%= t('member.following') %>" data-off="<%= t('member.follow') %>" aria-pressed="<%= isFollowing %>"><%= isFollowing ? t('member.following') : t('member.follow') %></button>
+              <% if (common.length) { %><span class="pill accent ph-common-pill" title="<%= common.slice(0, 6).map(function (c) { return c.titre; }).join(', ') %>"><%= tn('member.common_short', common.length) %></span><% } %>
+            <% } %>
+          </div>
+        </div>
+        <p class="ph-counters">
+          <span><strong><%= stats.resources %></strong> <%= tn('member.cnt.resources', stats.resources) %></span>
+          <i aria-hidden="true">·</i><span><strong><%= stats.likes %></strong> <%= tn('member.cnt.favorites', stats.likes) %></span>
+          <% if (stats.library !== null) { %><i aria-hidden="true">·</i><span><strong><%= stats.library %></strong> <%= t('member.cnt.library') %></span><% } %>
+          <i aria-hidden="true">·</i><span><strong id="follower-count"><%= stats.followers %></strong> <%= tn('member.cnt.followers', stats.followers) %></span>
+          <i aria-hidden="true">·</i><span><strong><%= stats.following %></strong> <%= t('member.cnt.following') %></span>
+        </p>
+      </section>
+
+      <div class="ptabs" id="ptabs" role="tablist" aria-label="<%= profile.display_name %>">
+        <button type="button" role="tab" data-tab="resources" aria-selected="<%= firstTab === 'resources' %>"><%= t('creator.resources') %> <span><%= resources.length %></span></button>
+        <button type="button" role="tab" data-tab="favorites" aria-selected="<%= firstTab === 'favorites' %>"><%= t('member.favorites') %> <span><%= favorites.length %></span></button>
+        <% if (libraryShown) { %><button type="button" role="tab" data-tab="library" aria-selected="<%= firstTab === 'library' %>"><%= t('member.library') %> <span><%= library.length %></span></button><% } %>
+        <button type="button" role="tab" data-tab="activity" aria-selected="<%= firstTab === 'activity' %>"><%= t('member.activity') %> <span><%= activity.length %></span></button>
+      </div>
+
+      <section class="ptab-panel" data-panel="resources" role="tabpanel"<%= firstTab === 'resources' ? '' : ' hidden' %>>
+        <% if (resources.length) { %><div class="grid"><% resources.forEach(function (g) { %><%- include('partials/card', { g: g, showDesc: true }) %><% }) %></div><% } else { %><div class="empty glass"><strong><%= t('creator.empty.title') %></strong><%= t('member.empty') %></div><% } %>
+      </section>
+      <section class="ptab-panel" data-panel="favorites" role="tabpanel"<%= firstTab === 'favorites' ? '' : ' hidden' %>>
+        <% if (favorites.length) { %><div class="grid"><% favorites.forEach(function (g) { %><%- include('partials/card', { g: g, showDesc: false }) %><% }) %></div><% } else { %><div class="empty glass"><strong><%= t('member.favorites') %></strong><%= t('member.empty') %></div><% } %>
+      </section>
+      <% if (libraryShown) { %>
+      <section class="ptab-panel" data-panel="library" role="tabpanel"<%= firstTab === 'library' ? '' : ' hidden' %>>
+        <% if (isSelf && !libraryPublic) { %><p class="auth-sub" style="margin:0 0 18px"><%= t('member.library.private_note') %></p><% } %>
+        <% if (library.length) { %><div class="grid"><% library.forEach(function (g) { %><%- include('partials/card', { g: g, showDesc: false }) %><% }) %></div><% } else { %><div class="empty glass"><strong><%= t('member.library') %></strong><%= t('member.empty') %></div><% } %>
+      </section>
+      <% } %>
+      <section class="ptab-panel" data-panel="activity" role="tabpanel"<%= firstTab === 'activity' ? '' : ' hidden' %>>
+        <% if (activity.length) { %>
+          <ol class="feed">
+            <% activity.forEach(function (a) { %>
+              <li class="feed-item glass">
+                <span class="feed-kind feed-<%= a.type %>"><%= t('member.activity.' + a.type) %></span>
+                <div class="feed-body">
+                  <% if (a.href) { %><a href="<%= a.href %>"><%= a.title %></a><% } else { %><strong><%= a.title %></strong><% } %>
+                  <% if (a.text) { %><p><%= a.text %></p><% } %>
+                </div>
+                <% if (a.date) { %><time datetime="<%= a.date %>"><%= fmtDate(a.date) %></time><% } %>
+              </li>
+            <% }) %>
+          </ol>
+        <% } else { %><div class="empty glass"><strong><%= t('member.activity') %></strong><%= t('member.empty') %></div><% } %>
+      </section>
+    </div>
+  </main>
+
+  <%- include('partials/foot') %>
+  <script>
+    (function () {
+      var tabs = Array.prototype.slice.call(document.querySelectorAll('#ptabs [data-tab]'));
+      var panels = Array.prototype.slice.call(document.querySelectorAll('.ptab-panel'));
+      function show(name, push) {
+        if (!tabs.some(function (t) { return t.dataset.tab === name; })) return;
+        tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t.dataset.tab === name)); });
+        var shown = [];
+        panels.forEach(function (p) { var on = p.dataset.panel === name; p.hidden = !on; if (on) shown = Array.prototype.slice.call(p.querySelectorAll('.card.reveal')); });
+        PS4.reveal(shown.filter(function (c) { return !c.classList.contains('is-in'); }));
+        if (push && history.replaceState) history.replaceState(null, '', '#' + name);
+      }
+      tabs.forEach(function (t) { t.addEventListener('click', function () { show(t.dataset.tab, true); }); });
+      var h = (location.hash || '').replace('#', '');
+      if (h) show(h, false);
+      PS4.reveal(document.querySelectorAll('.ptab-panel:not([hidden]) .card.reveal'));
+
+      var b = document.getElementById('follow-btn'); if (!b) return;
+      var token = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+      b.addEventListener('click', function () {
+        if (!token) { location.href = '/auth/discord?next=' + encodeURIComponent(location.pathname); return; }
+        b.disabled = true;
+        fetch('/api/users/' + b.dataset.id + '/follow', { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': token, 'Content-Type': 'application/json' }, body: '{}' })
+          .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+          .then(function (r) {
+            if (!r.ok) return;
+            b.classList.toggle('is-on', r.d.following); b.setAttribute('aria-pressed', String(r.d.following));
+            b.textContent = r.d.following ? b.dataset.on : b.dataset.off;
+            document.getElementById('follower-count').textContent = r.d.followers;
+          }).catch(function () {}).then(function () { b.disabled = false; });
+      });
+    })();
+  </script>
+</body>
+</html>

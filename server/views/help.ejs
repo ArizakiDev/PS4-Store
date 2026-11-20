@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <%- include('partials/head', { title: t('help.title') + ' — PS4Store', description: t('help.desc') }) %>
+</head>
+<body class="page-help">
+
+  <%- include('partials/nav', { active: 'help' }) %>
+  <%
+    var verLabel = release ? release.version : '';
+    var sizeLabel = release && release.size_label ? release.size_label : (storePkg.available ? storePkg.size : '');
+    var bannerKey = { operational: 'status.all_ok', degraded: 'status.some_degraded', outage: 'status.some_outage', checking: 'status.checking' }[status.overall];
+  %>
+
+  <main class="page">
+    <%- include('partials/vitrine', { vitrine: vitrineOf('status_sections') }) %>
+    <div class="wrap">
+      <% if (!isHidden('status_head')) { %><div class="head"<%- tg('status_head') %>>
+        <p class="eyebrow"><%= t('help.eyebrow') %></p>
+        <h1><%= t('help.title') %></h1>
+      </div><% } %>
+
+      <% if (!isHidden('status_banner')) { %><section class="st-banner st-<%= status.overall %>" role="status" aria-live="polite"<%- tg('status_banner') %>>
+        <span class="st-pulse" aria-hidden="true"></span>
+        <div>
+          <strong><%= t(bannerKey) %></strong>
+          <% if (status.checkedAt) { %><span><%= t('status.checked') %> <time datetime="<%= status.checkedAt %>" data-iso="<%= status.checkedAt %>"><%= fmtDate(status.checkedAt) %></time></span><% } %>
+        </div>
+      </section><% } %>
+
+      <% if (!isHidden('status_services')) { %><div<%- tg('status_services') %>>
+      <% status.services.forEach(function (s) { %>
+        <section class="svc glass" aria-label="<%= t('status.svc.' + s.key) %>">
+          <div class="svc-head">
+            <h2><%= t('status.svc.' + s.key) %> <button type="button" class="svc-help" data-tip="<%= t('status.svc.' + s.key + '.hint') %>" aria-label="<%= t('status.svc.' + s.key + '.hint') %>">?</button></h2>
+            <span class="svc-state st-<%= s.last %>"><%= t(s.last === 'checking' ? 'status.checking' : 'status.' + s.last) %><% if (s.ms != null && s.last !== 'outage') { %> <em><%= s.ms %> ms</em><% } %></span>
+          </div>
+          <div class="bars" role="img" aria-label="<%= t('status.svc.' + s.key) %> — <%= t('status.ago30') %>">
+            <% s.days.forEach(function (d) { %><span class="bar bar-<%= d.state %>" tabindex="0" data-tip="<%= d.tip %>"></span><% }) %>
+          </div>
+          <div class="bars-legend">
+            <span><%= t('status.ago30') %></span>
+            <i aria-hidden="true"></i>
+            <span class="avail"><%= s.avail == null ? t('status.nodata') : t('status.avail', { pct: String(s.avail).replace('.', lang === 'en' ? '.' : ',') }) %></span>
+            <i aria-hidden="true"></i>
+            <span><%= t('status.today') %></span>
+          </div>
+        </section>
+      <% }) %>
+      </div><% } %>
+
+      <% if (!isHidden('status_download')) { %><section class="dl-block glass"<%- tg('status_download') %>>
+        <div>
+          <h2><%= t('help.status.client') %></h2>
+          <p><% if (release) { %>PS4Store.pkg v<%= verLabel %><% if (sizeLabel) { %> · <%= sizeLabel %><% } %><% if (release.updated_at) { %> · <%= fmtDate(release.updated_at) %><% } %><% } else if (storePkg.available) { %>PS4Store.pkg · <%= storePkg.size %><% } else { %><%= t('help.status.pkg_missing') %><% } %></p>
+        </div>
+        <% if (storePkg.available) { %><a class="btn" href="/store/PS4Store.pkg" download="PS4Store.pkg"><%= t('home.download') %></a><% } %>
+      </section><% } %>
+
+      <% if (!isHidden('status_guides')) { %><section class="help-acc"<%- tg('status_guides') %>>
+        <details class="acc glass">
+          <summary><%= t('help.usb.title') %></summary>
+          <ol class="hg-steps">
+            <% [1, 2, 3, 4, 5].forEach(function (n) { %><li class="hg-step"><span class="hg-num"><%= n %></span><div><h3><%= t('help.usb.s' + n + '.t') %></h3><p><%= t('help.usb.s' + n + '.d') %></p></div></li><% }) %>
+          </ol>
+        </details>
+        <details class="acc glass">
+          <summary><%= t('help.pair.title') %></summary>
+          <ol class="hg-steps">
+            <% [1, 2, 3, 4].forEach(function (n) { %><li class="hg-step"><span class="hg-num"><%= n %></span><div><h3><%= t('help.pair.s' + n + '.t') %></h3><p><%= t('help.pair.s' + n + '.d') %></p></div></li><% }) %>
+          </ol>
+        </details>
+        <details class="acc glass">
+          <summary><%= t('help.faq.title') %></summary>
+          <div class="faq-list">
+            <% [1, 2, 3, 4, 5, 6].forEach(function (n) { %><div class="faq-item"><h3><%= t('help.faq.q' + n) %></h3><p><%= t('help.faq.a' + n) %></p></div><% }) %>
+          </div>
+        </details>
+        <p class="help-contact"><%= t('help.contact') %></p>
+      </section><% } %>
+    </div>
+  </main>
+
+  <div class="st-tip" id="st-tip" role="tooltip" hidden></div>
+
+  <%- include('partials/foot') %>
+  <script>
+    (function () {
+      'use strict';
+      var tm = document.querySelector('.st-banner time');
+      if (tm) { try { tm.textContent = new Date(tm.dataset.iso).toLocaleString(<%- JSON.stringify(lang) %>, { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) {} }
+
+      var tip = document.getElementById('st-tip');
+      function show(el) {
+        tip.textContent = el.getAttribute('data-tip'); tip.hidden = false;
+        var r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+        var x = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), document.documentElement.clientWidth - w - 8);
+        var y = r.top - h - 10; if (y < 8) y = r.bottom + 10;
+        tip.style.left = (x + window.scrollX) + 'px'; tip.style.top = (y + window.scrollY) + 'px';
+      }
+      function hide() { tip.hidden = true; }
+      document.querySelectorAll('[data-tip]').forEach(function (el) {
+        el.addEventListener('mouseenter', function () { show(el); });
+        el.addEventListener('mouseleave', hide);
+        el.addEventListener('focus', function () { show(el); });
+        el.addEventListener('blur', hide);
+        el.addEventListener('click', function (e) { e.preventDefault(); if (tip.hidden || tip.textContent !== el.getAttribute('data-tip')) show(el); else hide(); });
+      });
+      window.addEventListener('scroll', hide, { passive: true });
+    })();
+  </script>
+</body>
+</html>

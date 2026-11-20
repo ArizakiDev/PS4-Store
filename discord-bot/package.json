@@ -1,0 +1,10 @@
+{
+  "name": "ps4store-discord-bot",
+  "version": "1.0.0",
+  "description": "Bot Discord de PS4Store (connecté à l'API du serveur web)",
+  "private": true,
+  "main": "index.js",
+  "scripts": { "start": "node index.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "discord.js": "^14.16.3" }
+}

@@ -1,0 +1,29 @@
+<%
+  var hay = [g.titre, g.title_id, g.description, g.author_name].join(' ').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  var rtype = g.resource_type || 'pkg';
+%>
+<article class="card reveal" data-fw="<%= g.firmware_min %>" data-cat="<%= g.categorie %>" data-type="<%= rtype %>" data-search="<%= hay %>" data-id="<%= g.id %>" data-dl="<%= g.downloads_count || 0 %>" data-likes="<%= likeCount(g.id) %>" data-ts="<%= Date.parse(g.updated_at || g.created_at) || 0 %>">
+  <a class="card-hit" href="/jeu/<%= g.id %>" aria-label="<%= g.titre %>"></a>
+  <div class="cover">
+    <img src="<%= g.icon_url %>" alt="<%= t('card.cover_of', { title: g.titre }) %>" width="512" height="512" loading="lazy" decoding="async">
+    <span class="cover-fallback" aria-hidden="true"><%= g.titre.charAt(0).toUpperCase() %></span>
+    <% if (rtype !== 'pkg') { %><span class="type-badge"><%= t('type.' + rtype) %></span><% } %>
+    <% if (g.recently_updated) { %><span class="updated-badge"><%= t('card.updated') %></span><% } %>
+    <span class="fw-badge">FW <%= g.firmware_min %>+</span>
+  </div>
+  <div class="card-body">
+    <span class="card-cat"><%= catLabel(g.categorie) %></span>
+    <h3 class="card-title" title="<%= g.titre %>"><%= g.titre %></h3>
+    <% if (showDesc && g.description) { %><p class="card-desc"><%= g.description %></p><% } %>
+    <% if (g.author_url) { %>
+      <a class="card-author" href="<%= g.author_url %>">
+    <% } else { %>
+      <span class="card-author">
+    <% } %>
+        <span class="avatar"><%= initials(g.author_name) %><% if (g.author_avatar) { %><img src="<%= g.author_avatar %>" alt="" width="22" height="22" loading="lazy"><% } %></span>
+        <span><%= g.author_name %></span>
+    <% if (g.author_url) { %></a><% } else { %></span><% } %>
+    <div class="card-actions"><%- include('actions', { g: g }) %></div>
+    <div class="card-meta"><span>v<%= g.version %></span><span class="dot" aria-hidden="true"></span><span><%= g.size %></span><span class="dot" aria-hidden="true"></span><span class="dl-count" title="<%= t('card.downloads') %>">↓ <%= g.downloads_count || 0 %></span><svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg></div>
+  </div>
+</article>

@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <%- include('partials/head', { title: t('dash.page_title'), noindex: true }) %>
+</head>
+<body class="page-dashboard">
+
+<% if (authed) { %>
+  <%- include('partials/nav', { active: 'admin', navAdminUser: admin, navAdminCsrf: csrf }) %>
+<% } else { %>
+  <%- include('partials/nav', { active: 'admin' }) %>
+<% } %>
+
+<% if (!authed) { %>
+
+
+
+<% } else { %>
+
+  <main class="page">
+    <div class="wrap">
+      <div class="page-head">
+        <h1><%= t('dash.title') %></h1>
+        <p><%= t('dash.signed_as') %> <strong style="color:var(--text);font-weight:500">@<%= admin.username %></strong><%= admin.role === 'superadmin' ? ' · ' + t('dash.superadmin_suffix') : '' %></p>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="<%= t('dash.title') %>">
+        <button type="button" role="tab" id="tab-jeux" data-tab="jeux" aria-selected="true" aria-controls="panel-jeux"><%= t('dash.tab.resources') %></button>
+        <button type="button" role="tab" id="tab-vitrine" data-tab="vitrine" aria-selected="false" aria-controls="panel-vitrine"><%= t('vb.tab') %></button>
+        <button type="button" role="tab" id="tab-collections" data-tab="collections" aria-selected="false" aria-controls="panel-collections"><%= t('dash.tab.collections') %></button>
+        <button type="button" role="tab" id="tab-demandes" data-tab="demandes" aria-selected="false" aria-controls="panel-demandes"><%= t('dash.tab.requests') %><% if (requestsOpen.length) { %> <span class="pill"><%= requestsOpen.length %></span><% } %></button>
+        <% if (admin.role === 'superadmin') { %><button type="button" role="tab" id="tab-comptes" data-tab="comptes" aria-selected="false" aria-controls="panel-comptes"><%= t('dash.tab.users') %></button><% } %>
+      </div>
+
+      <section class="tab-panel" id="panel-jeux" role="tabpanel" aria-labelledby="tab-jeux">
+        <% if (pending.length) { %>
+        <div class="pending-wrap" id="pending">
+          <h3 class="sec-h"><%= t('dash.subs.title', { n: pending.length }) %></h3>
+          <% pending.forEach(function (p) { var g = p.game; %>
+            <div class="sub-card glass">
+              <img src="<%= g.icon_url %>" alt="" width="96" height="96" loading="lazy">
+              <div>
+                <h4><%= g.titre %></h4>
+                <div class="meta"><span><%= t('type.' + (g.resource_type || 'pkg')) %></span><span>v<%= g.version %></span><span><%= g.title_id %></span><span><%= t('dash.subs.by', { name: p.by }) %></span><span><%= fmtDate(p.created_at) %></span></div>
+                <% if (g.description) { %><p class="hint" style="margin-top:6px"><%= g.description.slice(0, 220) %></p><% } %>
+                <div class="link"><%= g.pkg_url %></div>
+                <div class="sub-check" data-check-out role="status" aria-live="polite"></div>
+                <div class="sub-actions">
+                  <button class="btn ghost small" type="button" data-check-sub data-url="<%= g.pkg_url %>" data-type="<%= g.resource_type || 'pkg' %>" data-target="<%= g.plugin_config ? g.plugin_config.target_type : '' %>"><%= t('dash.subs.check') %></button>
+                  <form method="post" action="/dashboard/submissions/<%= p.id %>/approve"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn small" type="submit"><%= t('dash.subs.approve') %></button></form>
+                  <form method="post" action="/dashboard/submissions/<%= p.id %>/reject"><input type="hidden" name="_csrf" value="<%= csrf %>"><input class="input" name="reason" maxlength="200" placeholder="<%= t('dash.subs.reason.ph') %>"><button class="btn danger small" type="submit"><%= t('dash.subs.reject') %></button></form>
+                </div>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+        <% } %>
+
+        <div class="card-form glass release-card" id="release-card" style="margin-bottom:22px">
+          <h3><%= t('dash.release.title') %></h3>
+          <p class="hint" id="rel-current" style="margin:4px 0 14px"><% if (release) { %><%= t('dash.release.current', { v: release.version, size: release.size_label, date: fmtDate(release.updated_at) }) %><% } else { %><%= t('dash.release.none') %><% } %></p>
+          <form id="form-release" autocomplete="off" data-current="<%= release ? release.version : '' %>">
+            <div class="grid2">
+              <label class="field"><%= t('dash.release.version') %><input class="input" name="version" id="rel-version" placeholder="01.01" maxlength="16" required><span class="hint"><%= t('dash.release.reminder') %></span></label>
+              <label class="field"><%= t('dash.release.file') %><input class="input" type="file" id="rel-file" accept=".pkg" required></label>
+            </div>
+            <label class="field" style="margin-top:14px"><%= t('dash.release.notes') %><textarea class="input" id="rel-notes" maxlength="600" placeholder="<%= t('dash.changelog.placeholder') %>"></textarea></label>
+            <progress id="rel-progress" max="100" value="0" hidden style="width:100%;margin-top:12px;height:10px"></progress>
+            <div class="yt-status" id="rel-status" role="status" aria-live="polite"></div>
+            <div class="form-foot"><button class="btn" type="submit" id="rel-submit"><%= t('dash.release.submit') %></button></div>
+          </form>
+        </div>
+
+        <% if (admin.role === 'superadmin') { %>
+        <div class="card-form glass" id="discord-card" style="margin-bottom:22px">
+          <h3><%= t('dash.discord.title') %></h3>
+          <p class="hint" style="margin:4px 0 14px"><%= t('dash.discord.hint') %> <strong><%= discord.configured ? t('dash.discord.on') : t('dash.discord.off') %></strong><% if (discord.fromEnv) { %> · <%= t('dash.discord.env') %><% } %></p>
+          <form method="post" action="/dashboard/settings" autocomplete="off">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <label class="field"><%= t('dash.discord.url') %><input class="input" type="password" name="discord_webhook_url" placeholder="<%= discord.configured ? t('dash.discord.url.keep') : 'https://discord.com/api/webhooks/…' %>" autocomplete="off" spellcheck="false"></label>
+            <div class="grid2" style="margin-top:14px">
+              <label class="field"><%= t('dash.discord.role') %><input class="input" name="discord_role_id" value="<%= discord.role %>" inputmode="numeric" maxlength="25"></label>
+              <label class="field"><%= t('dash.discord.site') %><input class="input" name="site_url" value="<%= discord.site %>" placeholder="https://mon-site.example" maxlength="200"></label>
+            </div>
+            <label class="check"><input type="checkbox" name="clear_webhook" value="1"><span><%= t('dash.discord.clear') %></span></label>
+            <div class="yt-status" id="discord-status" role="status" aria-live="polite"></div>
+            <div class="form-foot"><button class="btn ghost small" type="button" id="discord-test"><%= t('dash.discord.test') %></button><button class="btn small" type="submit"><%= t('dash.m.save') %></button></div>
+          </form>
+        </div>
+        <% } %>
+
+        <div class="panel-head">
+          <div><h2><%= t('dash.res.title') %></h2><p><%= tn('dash.res.count', games.length) %></p></div>
+          <div class="panel-actions">
+            <form method="post" action="/dashboard/check-all-links" class="inline-form"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn ghost small" type="submit"<%= linkRunning ? ' disabled' : '' %>><%= linkRunning ? t('dash.links.running') : t('dash.links.check_all') %></button></form>
+            <button class="btn small" type="button" id="btn-add"><%= t('dash.res.add') %></button>
+          </div>
+        </div>
+        <% var brokenGames = games.filter(function (g) { return g.link_check && g.link_check.url === g.pkg_url && g.link_check.ok === false; }); %>
+        <p class="hint link-summary<%= brokenGames.length ? ' is-bad' : '' %>"><%= brokenGames.length ? tn('dash.links.broken', brokenGames.length) : t('dash.links.all_ok') %><% if (linkRun) { %> · <%= t('dash.links.last', { date: fmtDate(linkRun.at) }) %><% } %></p>
+        <div class="table glass">
+          <% if (!games.length) { %>
+            <div class="empty-row"><strong><%= t('dash.res.empty.title') %></strong><%= t('dash.res.empty.text') %></div>
+          <% } %>
+          <% games.forEach(function (g) { %>
+            <div class="trow">
+              <img class="thumb" src="<%= g.icon_url %>" alt="" width="52" height="52" loading="lazy">
+              <div>
+                <div class="t-title"><%= g.titre %></div>
+                <div class="t-meta">
+                  <span class="chip type"><%= t('type.' + (g.resource_type || 'pkg')) %></span>
+                  <span class="chip"><%= g.title_id %></span><span class="chip">v<%= g.version %></span><span class="chip">FW <%= g.firmware_min %>+</span><span class="chip"><%= g.size %></span>
+                  <% if (g.resource_type === 'plugin' || g.resource_type === 'payload') { %><span class="chip"><%= g.plugin_config.supported_regions %></span><% } %>
+                  <% if (g.parent_title_id) { %><span class="chip">↳ <%= g.parent_title_id %></span><% } %>
+                  <span class="chip"><%= '↓ ' + (g.downloads_count || 0) %></span>
+                  <% if (g.comments_count) { %><span class="chip">💬 <%= g.comments_count %></span><% } %>
+                  <% if (g.reports_count) { %><span class="chip bad">⚠️ <%= tn('dash.reports', g.reports_count) %></span><% } %>
+                  <% if (g.link_check && g.link_check.url === g.pkg_url && g.link_check.ok === false) { %><span class="chip bad" title="<%= g.link_check.error %> — <%= fmtDate(g.link_check.checked_at) %>">⚠ <%= t('dash.links.dead') %> (<%= g.link_check.status || g.link_check.error %>)</span><% } %>
+                  <span><%= t('dash.by', { name: g.author_name }) %></span>
+                </div>
+              </div>
+              <div class="t-actions">
+                <% if (g.reports_count) { %><form method="post" action="/dashboard/games/<%= g.id %>/reset-reports" class="inline-form"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn ghost small" type="submit"><%= t('dash.reports.reset') %></button></form><% } %>
+                <% if (g.canEdit) { %>
+                  <button class="btn small" type="button" data-update="<%= g.id %>"><%= t('dash.update.btn') %></button>
+                  <button class="btn ghost small" type="button" data-edit="<%= g.id %>"><%= t('dash.edit') %></button>
+                  <button class="btn danger small" type="button" data-delete="<%= g.id %>"><%= t('dash.delete') %></button>
+                <% } else { %>
+                  <span class="locked"><%= t('dash.res.readonly') %></span>
+                <% } %>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="panel-vitrine" role="tabpanel" aria-labelledby="tab-vitrine" hidden>
+        <div class="panel-head"><div><h2><%= t('wb.launch.title') %></h2><p><%= t('wb.launch.sub') %></p></div></div>
+        <div class="card-form glass" style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+          <div><strong><%= homepage ? homepage.sections.length : 0 %></strong> <span class="hint"><%= t('wb.launch.sections') %></span></div>
+          <button type="button" class="btn" id="wb-open">🎨 <%= t('wb.launch.open') %></button>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="panel-collections" role="tabpanel" aria-labelledby="tab-collections" hidden>
+        <div class="panel-head"><div><h2><%= t('dash.col.title') %></h2><p><%= t('dash.col.sub') %></p></div></div>
+
+        <% function colForm(c) { %>
+          <div class="col-games">
+            <input class="input col-filter" type="search" placeholder="<%= t('dash.col.filter') %>" aria-label="<%= t('dash.col.filter') %>">
+            <div class="col-checks">
+              <% gameChoices.forEach(function (g) { var on = c && c.game_ids.indexOf(g.id) !== -1; %>
+                <label class="check col-check" data-name="<%= (g.titre + ' ' + g.title_id).toLowerCase() %>"><input type="checkbox" name="game_ids" value="<%= g.id %>"<%= on ? ' checked' : '' %>><span><%= g.titre %> <em><%= g.title_id %> · <%= t('type.' + g.resource_type) %></em></span></label>
+              <% }) %>
+            </div>
+          </div>
+        <% } %>
+
+        <details class="card-form glass col-edit" <%= collections.length ? '' : 'open' %>>
+          <summary><strong><%= t('dash.col.new') %></strong></summary>
+          <form method="post" action="/dashboard/collections" autocomplete="off">
+            <input type="hidden" name="_csrf" value="<%= csrf %>">
+            <div class="grid2">
+              <label class="field"><%= t('dash.col.f.title') %><input class="input" name="title" maxlength="60" required></label>
+              <label class="field"><%= t('dash.col.f.badge') %><input class="input" name="badge" maxlength="20" placeholder="<%= t('dash.col.f.badge.ph') %>"></label>
+            </div>
+            <label class="field"><%= t('dash.col.f.desc') %><input class="input" name="description" maxlength="200"></label>
+            <% colForm(null) %>
+            <label class="check"><input type="checkbox" name="featured" value="1" checked><span><%= t('dash.col.f.featured') %></span></label>
+            <div class="form-foot"><button class="btn" type="submit"><%= t('dash.col.create') %></button></div>
+          </form>
+        </details>
+
+        <% collections.forEach(function (c) { %>
+          <details class="card-form glass col-edit">
+            <summary><strong><%= c.title %></strong> <span class="pill"><%= tn('col.count', c.game_ids.length) %></span><% if (c.featured) { %> <span class="pill accent"><%= t('dash.col.live') %></span><% } %></summary>
+            <form method="post" action="/dashboard/collections/<%= c.id %>" autocomplete="off">
+              <input type="hidden" name="_csrf" value="<%= csrf %>">
+              <div class="grid2">
+                <label class="field"><%= t('dash.col.f.title') %><input class="input" name="title" maxlength="60" required value="<%= c.title %>"></label>
+                <label class="field"><%= t('dash.col.f.badge') %><input class="input" name="badge" maxlength="20" value="<%= c.badge %>"></label>
+              </div>
+              <label class="field"><%= t('dash.col.f.desc') %><input class="input" name="description" maxlength="200" value="<%= c.description %>"></label>
+              <% colForm(c) %>
+              <label class="check"><input type="checkbox" name="featured" value="1"<%= c.featured ? ' checked' : '' %>><span><%= t('dash.col.f.featured') %></span></label>
+              <div class="form-foot"><button class="btn" type="submit"><%= t('dash.m.save') %></button></div>
+            </form>
+            <form method="post" action="/dashboard/collections/<%= c.id %>/delete" class="inline-form" onsubmit="return confirm(<%= JSON.stringify(t('dash.col.confirm_delete')) %>)"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn danger small" type="submit"><%= t('dash.delete') %></button></form>
+          </details>
+        <% }) %>
+      </section>
+
+      <section class="tab-panel" id="panel-demandes" role="tabpanel" aria-labelledby="tab-demandes" hidden>
+        <div class="panel-head"><div><h2><%= t('dash.req.title') %></h2><p><%= tn('dash.req.count', requestsOpen.length) %></p></div><a class="btn ghost small" href="/demandes"><%= t('dash.req.public') %></a></div>
+        <div class="table glass">
+          <% if (!requestsOpen.length) { %><div class="empty-row"><strong><%= t('dash.req.empty') %></strong></div><% } %>
+          <% requestsOpen.forEach(function (r) { %>
+            <div class="req-admin-row">
+              <div class="req-admin-info">
+                <div class="t-title"><%= r.title %> <span class="pill accent">↑ <%= r.votes %></span></div>
+                <div class="t-meta"><span class="chip type"><%= t('type.' + r.resource_type) %></span><% if (r.title_id) { %><span class="chip"><%= r.title_id %></span><% } %><span><%= t('req.by', { name: r.author_name }) %></span><span><%= fmtDate(r.created_at) %></span></div>
+                <% if (r.notes) { %><p class="hint" style="margin-top:6px"><%= r.notes %></p><% } %>
+              </div>
+              <form method="post" action="/dashboard/requests/<%= r.id %>/fulfill" class="req-admin-form">
+                <input type="hidden" name="_csrf" value="<%= csrf %>">
+                <select class="input" name="game_id" required aria-label="<%= t('dash.req.pick') %>">
+                  <option value=""><%= t('dash.req.pick') %></option>
+                  <% gameChoices.forEach(function (g) { %><option value="<%= g.id %>"><%= g.titre %> (<%= g.title_id %>)</option><% }) %>
+                </select>
+                <button class="btn small" type="submit"><%= t('dash.req.fulfill') %></button>
+              </form>
+              <form method="post" action="/dashboard/requests/<%= r.id %>/reject" class="inline-form"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="btn danger small" type="submit"><%= t('dash.req.close') %></button></form>
+            </div>
+          <% }) %>
+        </div>
+      </section>
+
+      <% if (admin.role === 'superadmin') { %>
+      <section class="tab-panel" id="panel-comptes" role="tabpanel" aria-labelledby="tab-comptes" hidden>
+        <div class="panel-head"><div><h2><%= t('dash.users.title') %></h2><p><%= tn('dash.users.count', members.length) %></p></div></div>
+        <% if (members.length) { %>
+        <div class="card-form glass" id="members-card" style="margin-bottom:22px">
+          <h3><%= t('dash.members.title') %></h3>
+          <p class="hint" style="margin:4px 0 14px"><%= t('dash.members.hint') %></p>
+          <ul class="sub-list">
+            <% members.forEach(function (m) { %>
+              <li>
+                <span class="avatar" style="--size:34px;font-size:12px"><%= initials(m.username) %><% if (m.avatar) { %><img src="<%= m.avatar %>" alt="" width="34" height="34"><% } %></span>
+                <div><a href="/membre/<%= encodeURIComponent(m.username) %>"><strong>@<%= m.username %></strong></a><% if (m.discord) { %> <span class="hint">· Discord : <%= m.discord %></span><% } %><span class="hint"> · <%= t('dash.created_on', { date: fmtDate(m.created_at) }) %></span><% if (m.self) { %> <span class="tag"><%= t('dash.you') %></span><% } %></div>
+                <form method="post" action="/dashboard/users/<%= m.id %>/role" style="margin-left:auto">
+                  <input type="hidden" name="_csrf" value="<%= csrf %>">
+                  <select class="input" name="role" aria-label="<%= t('dash.f.role') %>" style="height:34px;font-size:13px;min-width:150px" onchange="this.form.submit()">
+                    <option value="user"<%= m.role === 'user' ? ' selected' : '' %>><%= t('dash.role.user') %></option>
+                    <option value="admin"<%= m.role === 'admin' ? ' selected' : '' %>><%= t('dash.role.admin') %></option>
+                    <option value="superadmin"<%= m.role === 'superadmin' ? ' selected' : '' %>><%= t('dash.role.superadmin') %></option>
+                  </select>
+                </form>
+              </li>
+            <% }) %>
+          </ul>
+        </div>
+        <% } %>
+
+      </section>
+      <% } %>
+
+    </div>
+  </main>
+
+  <div class="backdrop" id="modal-edit" role="dialog" aria-modal="true" aria-labelledby="edit-title">
+    <div class="modal">
+      <div class="modal-head"><h2 id="edit-title"><%= t('dash.m.add.title') %></h2><p><%= t('dash.m.sub') %></p></div>
+      <form method="post" action="/dashboard/games" id="form-edit" autocomplete="off">
+        <input type="hidden" name="_csrf" id="csrf-edit" value="<%= csrf %>">
+
+        <div class="grid2 main-row">
+          <label class="field"><span><%= t('dash.main.titleid') %></span><input class="input" name="title_id" id="f-titleid" placeholder="<%= t('dash.main.titleid.ph') %>" maxlength="80" autocomplete="off" spellcheck="false"><span class="hint" id="titleid-hint"></span></label>
+          <label class="field"><%= t('dash.f.version') %><input class="input" name="version" placeholder="1.00" value="1.00" maxlength="16" required></label>
+        </div>
+        <div>
+          <div class="yt-row">
+            <label class="field"><span id="link-label"><%= t('dash.f.link.pkg') %></span><input class="input" name="pkg_url" id="pkg-url" type="url" placeholder="https://drive.google.com/file/d/…/view" maxlength="1000" required></label>
+            <button class="btn ghost" type="button" id="pkg-check"><%= t('dash.check') %></button>
+          </div>
+          <div class="yt-status" id="pkg-status" role="status" aria-live="polite"></div>
+          <div class="link-report" id="pkg-report" hidden></div>
+          <label class="check"><input type="checkbox" name="force_proxy" value="1" id="force-proxy"><span><%= t('dash.force.label') %> <em><%= t('dash.force.hint') %></em></span></label>
+          <p class="hint" style="margin-top:6px"><%- t('dash.link.help', {}, true) %></p>
+        </div>
+
+        <div class="media-auto">
+          <button class="btn ghost" type="button" id="media-fetch"><%= t('dash.media.fetch') %></button>
+          <button class="btn" type="button" id="media-publish"><%= t('dash.media.publish') %></button>
+          <span class="yt-status" id="media-status" role="status" aria-live="polite"></span>
+        </div>
+        <details class="advanced" id="advanced">
+          <summary><%= t('dash.advanced') %></summary>
+          <div class="advanced-body">
+        <label class="field"><%= t('dash.f.type') %>
+          <select class="input" name="resource_type" id="f-type">
+            <% resourceTypes.forEach(function (rt) { %><option value="<%= rt %>"><%= t('type.' + rt) %></option><% }) %>
+          </select>
+          <span class="hint" id="type-hint"></span>
+        </label>
+
+        <label class="field"><%= t('dash.f.title') %><input class="input" name="titre" maxlength="80"></label>
+        <label class="field"><%= t('dash.f.desc') %><textarea class="input" name="description" maxlength="2000"></textarea></label>
+        <div class="grid2">
+          <label class="field"><%= t('dash.f.firmware') %><select class="input" name="firmware_min"><% firmwares.forEach(function (fw) { %><option value="<%= fw %>"><%= fw %></option><% }) %></select></label>
+          <label class="field"><%= t('dash.f.category') %><select class="input" name="categorie"><% categories.forEach(function (c) { %><option value="<%= c %>"><%= catLabel(c) %></option><% }) %></select></label>
+        </div>
+        <label class="field"><%= t('dash.f.size') %><input class="input" name="size" placeholder="420 Mo" maxlength="20"></label>
+        <label class="field"><%= t('dash.f.icon') %><input class="input" name="icon_url" type="text" inputmode="url" placeholder="https://…/icon.png" maxlength="500">
+          <span class="cover-preview" id="cover-preview"><img id="cover-thumb" alt=""><span id="cover-info"></span></span></label>
+
+        <label class="field" id="parent-field"><%= t('dash.f.parent') %>
+          <select class="input" name="parent_title_id" id="f-parent">
+            <option value=""><%= t('dash.f.parent.none') %></option>
+            <% parentOptions.forEach(function (p) { %><option value="<%= p.title_id %>"><%= p.titre %> (<%= p.title_id %>)</option><% }) %>
+          </select>
+          <span class="hint"><%= t('dash.f.parent.hint') %></span>
+        </label>
+
+        <div class="subsection" id="pc-section" hidden>
+          <h4><%= t('dash.pc.title') %></h4>
+          <div class="grid2">
+            <label class="field"><%= t('dash.f.regions') %>
+              <select class="input" name="pc_regions" id="pc-regions">
+                <option value="BOTH"><%= t('dash.region.BOTH') %></option>
+                <option value="EU"><%= t('dash.region.EU') %></option>
+                <option value="US"><%= t('dash.region.US') %></option>
+              </select>
+            </label>
+            <label class="field"><%= t('dash.f.target') %>
+              <select class="input" name="pc_target" id="pc-target">
+                <option value="plugin"><%= t('target.plugin') %></option>
+                <option value="cheat"><%= t('target.cheat') %></option>
+                <option value="patch"><%= t('target.patch') %></option>
+                <option value="payload"><%= t('target.payload') %></option>
+              </select>
+            </label>
+          </div>
+          <% ['eu', 'us'].forEach(function (r) { %>
+            <div class="region-box" id="box-<%= r %>">
+              <b><%= t('dash.pc.region.' + r.toUpperCase()) %></b>
+              <div class="grid2">
+                <label class="field" data-needs-titleid><%= t('dash.pc.titleid') %><input class="input" name="pc_<%= r %>_title_id" id="pc-<%= r %>-title" placeholder="CUSA00000" maxlength="9" style="text-transform:uppercase"></label>
+                <label class="field"><%= t('dash.pc.filename') %><input class="input" name="pc_<%= r %>_filename" id="pc-<%= r %>-file" maxlength="64" placeholder="mod.prx"></label>
+              </div>
+              <label class="field"><%= t('dash.pc.dir') %><input class="input" name="pc_<%= r %>_install_dir" id="pc-<%= r %>-dir" readonly></label>
+              <div class="grid2" data-ini>
+                <label class="field"><%= t('dash.pc.ini_section') %><input class="input" name="pc_<%= r %>_ini_section" id="pc-<%= r %>-sec" readonly></label>
+                <label class="field"><%= t('dash.pc.ini_line') %><input class="input" name="pc_<%= r %>_ini_line" id="pc-<%= r %>-line" readonly></label>
+              </div>
+            </div>
+          <% }) %>
+          <div>
+            <button class="btn ghost small" type="button" id="ai-run"><%= t('dash.ai.button') %></button>
+            <p class="hint" style="margin-top:6px"><%= t('dash.ai.hint') %></p>
+            <div class="yt-status" id="ai-status" role="status" aria-live="polite"></div>
+            <div class="ai-report" id="ai-report" hidden></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="yt-row">
+            <label class="field"><%= t('dash.yt.label') %><input class="input" name="youtube_url" id="yt-url" type="text" inputmode="url" placeholder="https://www.youtube.com/watch?v=…" maxlength="300"></label>
+            <button class="btn ghost" type="button" id="yt-fetch"><%= t('dash.yt.fetch') %></button>
+          </div>
+          <div class="yt-status" id="yt-status" role="status" aria-live="polite"></div>
+          <div class="yt-preview" id="yt-preview"><img id="yt-thumb" alt=""><span id="yt-info"></span></div>
+          <div class="yt-embed" id="yt-embed"></div>
+        </div>
+        <label class="field"><%= t('dash.shots.label') %><textarea class="input" name="screenshots" id="shots-field" placeholder="https://…/capture-1.jpg" spellcheck="false"></textarea><span class="hint"><%= t('dash.shots.hint') %></span></label>
+        <div class="shots-gallery" id="shots-gallery"></div>
+
+        <div class="subsection">
+          <h4><%= t('dash.changelog.title') %></h4>
+          <div class="grid2">
+            <label class="field"><%= t('dash.changelog.version') %><input class="input" name="changelog_version" id="cl-version" placeholder="1.01" maxlength="16"></label>
+            <label class="field"><%= t('dash.changelog.date') %><input class="input" name="changelog_date" id="cl-date" type="date"></label>
+          </div>
+          <label class="field"><%= t('dash.changelog.notes') %><textarea class="input" name="changelog_notes" maxlength="600" placeholder="<%= t('dash.changelog.placeholder') %>"></textarea></label>
+          <div id="cl-history" hidden>
+            <b style="font-size:13px"><%= t('dash.changelog.history') %></b>
+            <ul class="history" id="cl-list" style="margin-top:8px"></ul>
+          </div>
+        </div>
+
+          </div>
+        </details>
+
+        <div class="modal-foot"><button class="btn ghost" type="button" data-close><%= t('dash.m.cancel') %></button><button class="btn" type="submit" id="edit-submit" data-save="<%= t('dash.m.save') %>" data-publish="<%= t('dash.m.publish_now') %>"><%= t('dash.m.publish_now') %></button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="backdrop" id="modal-update" role="dialog" aria-modal="true" aria-labelledby="update-title">
+    <div class="modal">
+      <div class="modal-head"><h2 id="update-title"><%= t('dash.update.title') %></h2><p id="update-sub"><%= t('dash.update.sub') %></p></div>
+      <form method="post" id="form-update" autocomplete="off">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <div class="grid2">
+          <label class="field"><%= t('dash.update.version') %><input class="input" name="version" id="up-version" placeholder="1.05" maxlength="16" required></label>
+          <label class="field"><%= t('dash.update.link') %><input class="input" name="pkg_url" type="url" placeholder="https://…" maxlength="1000" required></label>
+        </div>
+        <label class="field"><%= t('dash.update.notes') %><textarea class="input" name="notes" maxlength="600" placeholder="<%= t('dash.update.notes.placeholder') %>"></textarea></label>
+        <label class="check" id="up-patch-row"><input type="checkbox" name="as_patch" value="1"><span><%= t('dash.update.patch') %> <em><%= t('dash.update.patch.hint') %></em></span></label>
+        <div class="modal-foot"><button class="btn ghost" type="button" data-close><%= t('dash.m.cancel') %></button><button class="btn" type="submit"><%= t('dash.update.submit') %></button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="backdrop" id="modal-delete" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+    <div class="modal confirm">
+      <div class="modal-head"><h2 id="delete-title"><%= t('dash.del.title') %></h2><p id="delete-text"></p></div>
+      <form method="post" id="form-delete">
+        <input type="hidden" name="_csrf" value="<%= csrf %>">
+        <div class="modal-foot"><button class="btn ghost" type="button" data-close><%= t('dash.m.cancel') %></button><button class="btn danger" type="submit"><%= t('dash.delete') %></button></div>
+      </form>
+    </div>
+  </div>
+
+<% } %>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <%
+    var jsKeys = ['dash.js.enter_link', 'dash.js.checking', 'dash.js.host', 'dash.js.mode.direct', 'dash.js.mode.relay', 'dash.js.size', 'dash.js.unknown', 'dash.js.range', 'dash.js.range.yes',
+      'dash.js.range.no', 'dash.js.pkg_ok', 'dash.js.pkg_bad', 'dash.js.type_mismatch', 'dash.js.titleid_diff', 'dash.js.link_valid', 'dash.js.link_notpkg', 'dash.js.link_unchecked', 'dash.js.file_ok',
+      'dash.js.net_error', 'dash.js.check_failed', 'dash.js.enter_yt', 'dash.js.fetching', 'dash.js.yt_done', 'dash.js.yt_sd', 'dash.js.yt_failed', 'dash.js.ai_running', 'dash.js.ai_done',
+      'dash.js.ai_ollama', 'dash.js.ai_fallback', 'dash.js.ai_failed', 'dash.js.ai_need_desc', 'dash.js.del_game', 'dash.js.del_admin', 'dash.m.add.title', 'dash.m.edit.title',
+      'dash.f.link.pkg', 'dash.f.link.file', 'dash.js.name_placeholder', 'dash.js.hint.pkg', 'dash.js.hint.update', 'dash.js.hint.dlc', 'dash.js.hint.plugin', 'dash.js.hint.payload',
+      'dash.js.titleid_auto', 'dash.js.titleid_main', 'dash.js.titleid_shared', 'dash.js.media_running', 'dash.js.media_done', 'dash.js.media_none', 'dash.js.media_failed', 'dash.js.media_need',
+      'dash.js.media_remove', 'dash.js.media_cover', 'dash.js.update_title', 'dash.js.rel_progress', 'dash.js.rel_done', 'dash.js.rel_failed', 'dash.js.rel_pick'];
+    var jsT = {}; jsKeys.forEach(function (k) { jsT[k] = t(k); });
+  %>
+  <% if (authed) { %>
+  <script type="application/json" id="data-games"><%- JSON.stringify(games).replace(/</g, '\\u003c') %></script>
+  <% } %>
+  <% var vbLabels = {}; %>
+  <script type="application/json" id="data-vb"><%- JSON.stringify({ homepage: homepage, games: gameChoices, creators: creatorChoices, csrf: csrf, labels: tPrefix('wb.') }).replace(/</g, '\\u003c') %></script>
+  <script type="application/json" id="data-flash"><%- JSON.stringify(flash || null).replace(/</g, '\\u003c') %></script>
+  <script type="application/json" id="data-i18n"><%- JSON.stringify(jsT).replace(/</g, '\\u003c') %></script>
+  <script src="/js/site.js?v=<%= assetV('js/site.js') %>"></script>
+  <script src="/js/dashboard.js?v=<%= assetV('js/dashboard.js') %>"></script>
+</body>
+</html>

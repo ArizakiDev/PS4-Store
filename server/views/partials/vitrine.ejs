@@ -1,0 +1,209 @@
+<%
+  var GROUPS = { all: 'filter.all', games: 'home.tab.games', mods: 'home.tab.mods', payloads: 'home.tab.payloads' };
+%>
+<% vitrine.forEach(function (s) { %>
+<div class="<%= s.wrapClass %>" style="<%= s.wrapStyle %>" data-bid="<%= s.id %>" data-type="<%= s.type %>">
+  <% if (s.type === 'carousel' && s.slides.length) { %>
+    <section class="vt vt-carousel" data-auto="<%= s.autoplay_s %>" aria-roledescription="carousel" aria-label="<%= t('vt.carousel') %>">
+      <div class="cr-bg" aria-hidden="true"></div>
+      <div class="wrap">
+        <div class="cr-stage">
+          <% s.slides.forEach(function (sl, i) { %>
+            <article class="cr-slide<%= i === 0 ? ' is-active' : '' %>" style="--accent: <%= sl.accent_color %>" data-img="<%= sl.image_url %>" aria-hidden="<%= i !== 0 %>" aria-roledescription="slide" aria-label="<%= i + 1 %> / <%= s.slides.length %>">
+              <% if (sl.image_url) { %><img class="cr-img" src="<%= sl.image_url %>" alt="" loading="<%= i === 0 ? 'eager' : 'lazy' %>" decoding="async"><% } %>
+              <div class="cr-shade" aria-hidden="true"></div>
+              <div class="cr-copy">
+                <% if (sl.badge) { %><span class="cr-badge"><%= sl.badge %></span><% } %>
+                <h2<%- sl.custom ? ' data-edit="title" data-slide="' + sl.id + '"' : '' %>><%= sl.title %></h2>
+                <% if (sl.subtitle) { %><p<%- sl.custom ? ' data-edit="subtitle" data-slide="' + sl.id + '"' : '' %>><%= sl.subtitle %></p><% } %>
+                <div class="cr-actions">
+                  <% if (sl.cta_url) { %><a class="btn" href="<%= sl.cta_url %>"<%- /^https?:/.test(sl.cta_url) ? ' target="_blank" rel="noopener noreferrer"' : '' %>><%= sl.cta_label || t('vt.discover') %></a><% } %>
+                  <% if (sl.sponsored_by) { %><span class="cr-by"><%= t('vt.sponsored_by', { name: sl.sponsored_by }) %></span><% } %>
+                </div>
+              </div>
+            </article>
+          <% }) %>
+          <% if (s.slides.length > 1) { %>
+            <button type="button" class="cr-nav cr-prev" aria-label="<%= t('common.prev') %>"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 3 5 9l6 6"/></svg></button>
+            <button type="button" class="cr-nav cr-next" aria-label="<%= t('common.next') %>"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 3 6 6-6 6"/></svg></button>
+            <div class="cr-dots" role="tablist"><% s.slides.forEach(function (sl, i) { %><button type="button" role="tab" aria-selected="<%= i === 0 %>" aria-label="<%= i + 1 %>"></button><% }) %></div>
+          <% } %>
+        </div>
+        <% if (s.slides.length > 1) { %>
+          <div class="cr-thumbs"><% s.slides.forEach(function (sl, i) { %><button type="button" class="cr-thumb<%= i === 0 ? ' is-on' : '' %>" data-i="<%= i %>"><span class="cr-thumb-img"><% if (sl.icon_url || sl.image_url) { %><img src="<%= sl.icon_url || sl.image_url %>" alt="" loading="lazy" width="48" height="48"><% } %></span><span class="cr-thumb-t"><%= sl.title %></span></button><% }) %></div>
+        <% } %>
+      </div>
+    </section>
+
+  <% } else if (s.type === 'collab_banner') { %>
+    <section class="vt vt-collab-wrap"><div class="wrap">
+      <div class="vt-collab glass" style="--accent: <%= s.accent_color %>">
+        <% if (s.image_url) { %><img class="vc-bg" src="<%= s.image_url %>" alt="" loading="lazy" decoding="async"><% } %>
+        <div class="vc-shade" aria-hidden="true"></div>
+        <div class="vc-body">
+          <div class="vc-text">
+            <% if (s.badge) { %><span class="cr-badge"><%= s.badge %></span><% } %>
+            <h2 data-edit="title"><%= s.title %></h2>
+            <% if (s.description) { %><p data-edit="description"><%= s.description %></p><% } %>
+            <% if (s.cta_url && s.cta_label) { %><a class="btn" href="<%= s.cta_url %>"><%= s.cta_label %></a><% } %>
+          </div>
+          <% if (s.members.length) { %>
+            <div class="vc-people">
+              <% s.members.forEach(function (m, i) { %>
+                <% if (i > 0) { %><span class="vc-x" aria-hidden="true">×</span><% } %>
+                <a class="vc-person" href="<%= m.url %>"><span class="avatar" style="--size:64px;font-size:22px"><%= initials(m.name) %><% if (m.avatar) { %><img src="<%= m.avatar %>" alt="" width="64" height="64" loading="lazy"><% } %></span><strong><%= m.name %></strong><small>@<%= m.username %></small></a>
+              <% }) %>
+            </div>
+          <% } %>
+        </div>
+      </div>
+    </div></section>
+
+  <% } else if (s.type === 'spotlight_game') { %>
+    <section class="vt vt-spot-wrap"><div class="wrap">
+      <article class="vt-spot glass" style="--accent: <%= s.accent_color %>">
+        <% if (s.image_url) { %><img class="vs-bg" src="<%= s.image_url %>" alt="" loading="lazy" decoding="async"><% } %>
+        <div class="vs-shade" aria-hidden="true"></div>
+        <div class="vs-body">
+          <% if (s.game) { %><a class="vs-cover" href="/jeu/<%= s.game.id %>"><img src="<%= s.game.icon_url %>" alt="<%= t('card.cover_of', { title: s.game.titre }) %>" width="220" height="220" loading="lazy"></a><% } %>
+          <div class="vs-text">
+            <span class="cr-badge"><%= s.badge %></span>
+            <h2 data-edit="title"><%= s.title %></h2>
+            <% if (s.description) { %><p data-edit="description"><%= s.description %></p><% } %>
+            <% if (s.note) { %><p class="vs-note"><%= s.note %></p><% } %>
+            <% if (s.game) { %>
+              <div class="cr-actions">
+                <% if (me && me.hasConsole) { %><button type="button" class="btn" data-act="remote" data-game="<%= s.game.id %>" data-done="<%= t('act.remote_sent') %>"><span class="lbl"><%= t('vt.install_ps4') %></span></button><% } %>
+                <a class="btn<%= me && me.hasConsole ? ' ghost' : '' %>" href="/jeu/<%= s.game.id %>"><%= t('vt.view_page') %></a>
+              </div>
+            <% } %>
+          </div>
+        </div>
+      </article>
+    </div></section>
+
+  <% } else if (s.type === 'cta_banner') { %>
+    <section class="vt vt-cta-wrap"><div class="wrap">
+      <div class="vt-cta glass" style="--accent: <%= s.accent_color %>">
+        <% if (s.image_url) { %><img class="vc-bg" src="<%= s.image_url %>" alt="" loading="lazy" decoding="async"><% } %>
+        <div class="vc-shade" aria-hidden="true"></div>
+        <div class="vt-cta-body">
+          <% if (s.icon) { %><span class="vt-cta-ico" aria-hidden="true"><%= s.icon %></span><% } %>
+          <div class="vt-cta-text">
+            <% if (s.badge) { %><span class="cr-badge"><%= s.badge %></span><% } %>
+            <h2 data-edit="title"><%= s.title %></h2>
+            <% if (s.text) { %><p data-edit="text"><%= s.text %></p><% } %>
+          </div>
+          <% if (s.cta_label && s.cta_url) { %><a class="btn" href="<%= s.cta_url %>"<%- /^https?:/.test(s.cta_url) ? ' target="_blank" rel="noopener noreferrer"' : '' %>><%= s.cta_label %></a><% } %>
+        </div>
+      </div>
+    </div></section>
+
+  <% } else if (s.type === 'rich_text') { %>
+    <section class="vt vt-rich"><div class="wrap"><div class="rt-body rt-<%= s.width %>" data-rich><%- s.html %></div></div></section>
+
+  <% } else if (s.type === 'features_grid') { %>
+    <section class="vt vt-feat-wrap"><div class="wrap">
+      <% if (s.title) { %><h2 class="vt-title" data-edit="title"><%= s.title %></h2><% } %>
+      <div class="vt-feat cols-<%= s.cols %>" style="--accent: <%= s.accent_color || '' %>">
+        <% s.items.forEach(function (it) { %><article class="vt-feat-card glass"><% if (it.icon) { %><span class="vf-ic" aria-hidden="true"><%= it.icon %></span><% } %><h3><%= it.title %></h3><% if (it.text) { %><p><%= it.text %></p><% } %></article><% }) %>
+      </div>
+    </div></section>
+
+  <% } else if (s.type === 'video') { %>
+    <% if (s.yt) { %>
+    <section class="vt vt-video-wrap"><div class="wrap">
+      <% if (s.title) { %><h2 class="vt-title" data-edit="title"><%= s.title %></h2><% } %>
+      <div class="vt-video"><iframe src="https://www.youtube-nocookie.com/embed/<%= s.yt %>?rel=0" title="<%= s.title || 'Vidéo' %>" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+      <% if (s.caption) { %><p class="vt-caption"><%= s.caption %></p><% } %>
+    </div></section>
+    <% } else if (editMode) { %>
+    <section class="vt vt-video-wrap"><div class="wrap"><div class="vt-video" style="display:grid;place-items:center;color:var(--pearl)"><span>🎬 <%= t('vt.video.empty') %></span></div></div></section>
+    <% } %>
+
+  <% } else if (s.type === 'faq') { %>
+    <section class="vt vt-faq-wrap"><div class="wrap">
+      <% if (s.title) { %><h2 class="vt-title" data-edit="title"><%= s.title %></h2><% } %>
+      <div class="vt-faq">
+        <% s.items.forEach(function (it) { %><details class="vt-faq-item glass"><summary><%= it.q %></summary><p><%= it.a %></p></details><% }) %>
+      </div>
+    </div></section>
+
+  <% } else if (s.type === 'discord_invite') { %>
+    <section class="vt vt-disc-wrap"><div class="wrap">
+      <div class="vt-disc glass" style="--accent: #5865F2">
+        <div class="vd-main">
+          <span class="vd-logo" aria-hidden="true"><svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg></span>
+          <div class="vd-text"><h2 data-edit="title"><%= s.title || t('vt.disc.title') %></h2><p data-edit="text"><%= s.text || t('vt.disc.text') %></p>
+            <% if (s.online != null) { %><span class="vd-online"><i aria-hidden="true"></i><%= t('vt.disc.online', { n: s.online }) %></span><% } %></div>
+        </div>
+        <% if (s.channelNames.length) { %><ul class="vd-chans" aria-label="<%= t('vt.disc.channels') %>"><% s.channelNames.forEach(function (c) { %><li># <%= c %></li><% }) %></ul><% } %>
+        <% if (s.invite) { %><a class="btn discord" href="<%= s.invite %>" target="_blank" rel="noopener noreferrer"><%= s.button_label %></a><% } %>
+      </div>
+    </div></section>
+
+  <% } else if (s.type === 'counters') { %>
+    <section class="vt vt-cnt-wrap"><div class="wrap">
+      <div class="vt-cnt glass cols-<%= Math.max(1, s.items.length) %>">
+        <% s.items.forEach(function (it) { %><div class="vt-cnt-item"><span class="vc-v"><%= it.value %></span><span class="vc-l"><%= it.label %></span><% if (it.sub) { %><small><%= it.sub %></small><% } %></div><% }) %>
+      </div>
+    </div></section>
+
+  <% } else if (s.type === 'gallery') { %>
+    <section class="vt vt-gal-wrap"><div class="wrap">
+      <% if (s.title) { %><h2 class="vt-title" data-edit="title"><%= s.title %></h2><% } %>
+      <div class="vt-gal gal-<%= s.layout %>">
+        <% s.images.forEach(function (im, i) { %><button type="button" class="vt-gal-item" data-lb="<%= im.url %>" data-cap="<%= im.caption %>" aria-label="<%= im.caption || t('game.screen_zoom', { n: i + 1 }) %>"><img src="<%= im.url %>" alt="<%= im.caption %>" loading="lazy" decoding="async"></button><% }) %>
+      </div>
+    </div></section>
+
+  <% } else if (s.type === 'top_creators') { %>
+    <% if (s.members.length) { %>
+    <section class="vt vt-top-wrap"><div class="wrap">
+      <% if (s.title) { %><h2 class="vt-title" data-edit="title"><%= s.title %></h2><% } %>
+      <div class="vt-top cols-<%= s.members.length %>">
+        <% s.members.forEach(function (m) { %>
+          <article class="vt-top-card glass">
+            <span class="avatar" style="--size:72px;font-size:26px"><%= initials(m.name) %><% if (m.avatar) { %><img src="<%= m.avatar %>" alt="" width="72" height="72" loading="lazy"><% } %></span>
+            <h3><%= m.name %></h3><small>@<%= m.username %> · <%= tn('vt.top.resources', m.resources) %></small>
+            <% if (m.bio) { %><p><%= m.bio %></p><% } %>
+            <a class="btn ghost small" href="<%= m.url %>"><%= t('vt.top.profile') %></a>
+          </article>
+        <% }) %>
+      </div>
+    </div></section>
+    <% } else if (editMode) { %>
+    <section class="vt vt-top-wrap"><div class="wrap"><p class="vt-caption">🏆 <%= t('vt.top.empty') %></p></div></section>
+    <% } %>
+
+  <% } else if (s.type === 'button_bar') { %>
+    <section class="vt vt-bb-wrap"><div class="wrap"><div class="vt-bb al-<%= s.align %>">
+      <% s.buttons.forEach(function (b) { %><a class="btn vt-bb-<%= b.size %>" href="<%= b.url || '#' %>"<%- /^https?:/.test(b.url) ? ' target="_blank" rel="noopener noreferrer"' : '' %><%- b.color ? ' style="background:' + b.color + ';color:#fff"' : '' %>><% if (b.icon) { %><span aria-hidden="true"><%= b.icon %></span> <% } %><%= b.label %></a><% }) %>
+    </div></div></section>
+
+  <% } else if (s.type === 'spacer') { %>
+    <div class="vt-spacer" style="height: <%= s.height %>px" role="separator"><% if (s.line || s.title) { %><div class="wrap vt-sp-in"><% if (s.title) { %><span data-edit="title"><%= s.title %></span><% } %><i aria-hidden="true"></i></div><% } %></div>
+
+  <% } else if (s.type === 'latest_grid') { %>
+    <section class="section vt-latest" id="derniers-<%= s.id %>" data-count="<%= s.count %>">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 data-edit="title"><%= s.title || t('home.latest.title') %></h2>
+          <% if (s.filter === 'all' && !isHidden('latest_filter_tabs')) { %>
+          <div class="latest-tabs" role="group"<%- tg('latest_filter_tabs') %> aria-label="<%= t('filter.type') %>">
+            <% ['all', 'games', 'mods', 'payloads'].forEach(function (f, i) { %><button type="button" data-f="<%= f %>" aria-pressed="<%= i === 0 %>"><%= t(GROUPS[f]) %></button><% }) %>
+          </div>
+          <% } %>
+        </div>
+        <% if (s.games.length) { %>
+          <div class="latest"><% s.games.forEach(function (g) { %><%- include('card', { g: g, showDesc: false }) %><% }) %></div>
+          <p class="latest-empty" hidden><%= t('home.latest.none') %></p>
+          <% if (!isHidden('latest_more_link')) { %><div class="latest-more"<%- tg('latest_more_link') %>><a class="more" href="/catalogue"><%= t('home.latest.all') %> →</a></div><% } %>
+        <% } else { %>
+          <div class="empty glass"><strong><%= t('home.empty.title') %></strong><%= t('home.empty.text') %></div>
+        <% } %>
+      </div>
+    </section>
+  <% } %>
+</div>
+<% }) %>

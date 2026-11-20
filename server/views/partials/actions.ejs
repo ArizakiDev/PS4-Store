@@ -1,0 +1,20 @@
+<%
+  var gid = g.id, withLabels = typeof labels !== 'undefined' && labels;
+  var liked = isLiked(gid), lib = inLibrary(gid);
+%>
+<div class="act-row<%= withLabels ? ' with-labels' : '' %>">
+  <button type="button" class="act-btn like<%= liked ? ' is-on' : '' %>" data-act="like" data-game="<%= gid %>" aria-pressed="<%= liked %>" aria-label="<%= t('act.like') %>" title="<%= t('act.like') %>">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17.2 3.1 10.6a4.1 4.1 0 0 1 5.8-5.8l1.1 1.1 1.1-1.1a4.1 4.1 0 0 1 5.8 5.8z"/></svg>
+    <span class="count"><%= likeCount(gid) %></span>
+  </button>
+  <button type="button" class="act-btn lib<%= lib ? ' is-on' : '' %>" data-act="library" data-game="<%= gid %>" data-lbl-on="<%= t('act.in_library') %>" data-lbl-off="<%= t('act.library') %>" aria-pressed="<%= lib %>" aria-label="<%= t('act.library') %>" title="<%= t('act.library') %>">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 3h9a1 1 0 0 1 1 1v13l-5.5-3.6L4.5 17V4a1 1 0 0 1 1-1z"/></svg>
+    <% if (withLabels) { %><span class="lbl"><%= lib ? t('act.in_library') : t('act.library') %></span><% } %>
+  </button>
+  <% if (me && me.hasConsole) { %>
+  <button type="button" class="act-btn remote" data-act="remote" data-game="<%= gid %>" data-done="<%= t('act.remote_sent') %>" aria-label="<%= t('act.remote') %>" title="<%= t('act.remote') %>">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v9.5M6 9l4 4 4-4M4 16.5h12"/></svg>
+    <% if (withLabels) { %><span class="lbl"><%= t('act.remote') %></span><% } %>
+  </button>
+  <% } %>
+</div>

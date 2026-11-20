@@ -1,0 +1,27 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><%= title %></title>
+<% if (typeof description !== 'undefined' && description) { %><meta name="description" content="<%= description %>"><% } %>
+<% if (typeof noindex !== 'undefined' && noindex) { %><meta name="robots" content="noindex, nofollow"><% } %>
+<meta name="theme-color" content="#000000">
+<% if (typeof me !== 'undefined' && me) { %><meta name="csrf-token" content="<%= csrfFor() %>"><% } %>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem('ps4store-theme');
+      if (['oled', 'classic', 'midnight', 'light'].indexOf(t) !== -1) document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {  }
+  })();
+</script>
+<link rel="stylesheet" href="/css/style.css?v=<%= assetV('css/style.css') %>">
+<% if (typeof siteTheme !== 'undefined' && siteTheme) { var th = siteTheme; %>
+<style id="site-theme">
+<% if (th.accent) { %>:root:root { --accent: <%= th.accent %>; --accent-hover: color-mix(in srgb, <%= th.accent %> 85%, #fff); --accent-soft: color-mix(in srgb, <%= th.accent %> 22%, transparent); --accent-text: color-mix(in srgb, <%= th.accent %> 62%, #fff); }
+:root:root[data-theme="light"] { --accent-text: color-mix(in srgb, <%= th.accent %> 80%, #000); }
+<% } %><% if (th.bg_color) { %>:root:root { --bg: <%= th.bg_color %>; }
+<% } %><% if (th.radius != null) { %>:root:root { --radius: <%= th.radius %>px; }
+<% } %>
+</style>
+<script>document.documentElement.setAttribute('data-nav', <%- JSON.stringify(th.nav_style) %>); document.documentElement.setAttribute('data-card', <%- JSON.stringify(th.card_style) %>);</script>
+<% } %>
+<% if (typeof editMode !== 'undefined' && editMode) { %><script>document.documentElement.classList.add('wb-edit');</script><% } %>

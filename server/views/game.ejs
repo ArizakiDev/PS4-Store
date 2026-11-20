@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<head>
+  <%- include('partials/head', { title: game.titre + ' — PS4Store', description: (game.description || (game.titre + ' PS4Store')).slice(0, 160) }) %>
+  <%
+    var rtype = game.resource_type || 'pkg';
+    var pc = game.plugin_config || {};
+    var isMod = rtype === 'plugin' || rtype === 'payload';
+    var regions = [];
+    if (isMod) {
+      if (pc.supported_regions === 'BOTH' || pc.supported_regions === 'EU') regions.push('eu');
+      if (pc.supported_regions === 'BOTH' || pc.supported_regions === 'US') regions.push('us');
+    }
+  %>
+</head>
+<body class="page-game">
+  <div class="ambient" aria-hidden="true"><img src="<%= game.icon_url %>" alt=""></div>
+
+  <%- include('partials/nav', { active: 'catalogue' }) %>
+
+  <main class="page">
+    <div class="wrap">
+      <a class="back" href="/catalogue">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2 4 7l5 5"/></svg>
+        <%= t('nav.catalogue') %>
+      </a>
+
+      <div class="layout">
+        <div class="col-left">
+          <div class="poster">
+            <div class="cover">
+              <img src="<%= game.icon_url %>" alt="<%= t('card.cover_of', { title: game.titre }) %>" width="512" height="512" decoding="async">
+              <span class="cover-fallback" aria-hidden="true"><%= game.titre.charAt(0).toUpperCase() %></span>
+            </div>
+          </div>
+
+          <div class="install glass">
+            <div class="install-head">
+              <svg viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="18" height="10" rx="5"/><path d="M6 11h3M7.5 9.5v3M14.5 10v.01M16.2 12v.01"/></svg>
+              <h3><%= t('game.install.title') %></h3>
+            </div>
+            <ol>
+              <li><b>1</b><span><%- t('game.install.s1', { link: '<a href="/#installation" style="color:var(--accent-text)">' + t('game.install.s1_link') + '</a>' }, true) %></span></li>
+              <li><b>2</b><span><%- t('game.install.s2', { title: '<strong>' + escapeHtml(game.titre) + '</strong>' }, true) %></span></li>
+              <li><b>3</b><span><%- t('game.install.s3.' + rtype, {}, true) %></span></li>
+            </ol>
+            <% if (rtype === 'update' || rtype === 'dlc') { %><p class="tip"><%= t('game.install.tip.' + rtype) %></p><% } %>
+            <% if (rtype === 'plugin') { %><p class="tip"><%= t('game.install.tip.plugin') %></p><% } %>
+            <% if (downloadUrl) { %><div class="dl-latest"><a class="btn small" href="<%= downloadUrl %>" rel="noopener" download><%= t('game.download_latest', { v: game.version }) %></a></div><% } %>
+          </div>
+        </div>
+
+        <div class="col-right">
+          <p class="eyebrow">
+            <span><%= catLabel(game.categorie) %></span>
+            <% if (rtype !== 'pkg') { %><span class="pill accent"><%= t('type.' + rtype) %></span><% } %>
+            <% regions.forEach(function (r) { %><span class="pill"><%= r.toUpperCase() %></span><% }) %>
+          </p>
+          <h1><%= game.titre %></h1>
+          <div class="game-actions"><%- include('partials/actions', { g: game, labels: true }) %><% if (me) { %><button type="button" class="act-btn report-btn" id="report-open"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 17V3.5M5 4h9l-1.8 3L14 10H5"/></svg><span class="lbl"><%= t('rep.button') %></span></button><% } %></div>
+          <% if (parent) { %><p class="parent-link"><%= t('game.parent') %> <a href="/jeu/<%= parent.id %>"><%= parent.titre %></a></p><% } %>
+
+          <dl class="specs">
+            <div class="spec glass"><dt><%= t('spec.titleid') %></dt><dd><%= game.title_id %></dd></div>
+            <div class="spec glass"><dt><%= t('spec.version') %></dt><dd><%= game.version %></dd></div>
+            <div class="spec glass"><dt><%= t('spec.size') %></dt><dd><%= game.size %></dd></div>
+            <div class="spec glass"><dt><%= t('spec.firmware') %></dt><dd><%= game.firmware_min %></dd></div>
+            <div class="spec glass"><dt><%= t('spec.downloads') %></dt><dd><%= community.downloads %></dd></div>
+          </dl>
+
+          <% if (game.description) { %>
+            <section class="block"><h2><%= t('game.about') %></h2><p class="desc"><%= game.description %></p></section>
+          <% } %>
+
+          <section class="block fwc" id="compat">
+            <h2><%= t('fw.title') %></h2>
+            <div class="fwc-card glass">
+              <p class="fwc-sub"><%= t('fw.sub') %></p>
+              <% community.fw.fw.forEach(function (f) { %>
+                <div class="fwc-row" data-fw-row="<%= f.key %>">
+                  <b>FW <%= f.key %></b>
+                  <div class="fwc-bar" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= f.pct === null ? 0 : f.pct %>" aria-label="<%= t('fw.bar_label', { fw: f.key }) %>"><span style="width:<%= f.pct === null ? 0 : f.pct %>%"></span></div>
+                  <span class="fwc-pct"><%= f.pct === null ? '—' : f.pct + '%' %></span>
+                  <span class="fwc-n" data-one="<%= t('fw.votes_one') %>" data-other="<%= t('fw.votes_other') %>"><%= tn('fw.votes', f.votes) %></span>
+                </div>
+              <% }) %>
+              <p class="fwc-issues" id="fwc-issues" data-one="<%= t('fw.issues_one') %>" data-other="<%= t('fw.issues_other') %>"><%= tn('fw.issues', community.fw.issue) %></p>
+              <div class="fwc-vote" id="fwc-vote" role="group" aria-label="<%= t('fw.vote_label') %>">
+                <button type="button" class="pill fw-btn<%= community.mine === '9.00' ? ' is-on' : '' %>" data-fw-vote="9.00" aria-pressed="<%= community.mine === '9.00' %>"><%= t('fw.works', { fw: '9.00' }) %></button>
+                <button type="button" class="pill fw-btn<%= community.mine === '11.00' ? ' is-on' : '' %>" data-fw-vote="11.00" aria-pressed="<%= community.mine === '11.00' %>"><%= t('fw.works', { fw: '11.00' }) %></button>
+                <button type="button" class="pill fw-btn issue<%= community.mine === 'issue' ? ' is-on' : '' %>" data-fw-vote="issue" aria-pressed="<%= community.mine === 'issue' %>"><%= t('fw.issue') %></button>
+              </div>
+              <p class="fwc-msg" id="fwc-msg" role="status" aria-live="polite"></p>
+            </div>
+          </section>
+
+          <% if (isMod && regions.length) { %>
+            <section class="block">
+              <h2><%= t('game.where.title') %></h2>
+              <div class="paths glass">
+                <% regions.forEach(function (r) { var rc = pc[r] || {}; %>
+                  <div class="path-row">
+                    <b><%= t('region.' + r.toUpperCase() + '.short') %></b>
+                    <% if (rc.title_id) { %><span><em><%= t('spec.titleid') %></em><code><%= rc.title_id %></code></span><% } %>
+                    <span><em><%= t('game.where.file') %></em><code><%= (rc.install_dir || '') + '/' + (rc.filename || '') %></code></span>
+                    <% if (rc.ini_line) { %><span><em><%= rc.ini_section %></em><code><%= rc.ini_line %></code></span><% } %>
+                  </div>
+                <% }) %>
+              </div>
+            </section>
+          <% } %>
+
+          <section class="creator glass" aria-label="<%= t('creator.label') %>">
+            <div class="creator-head">
+              <span class="avatar"><%= initials(author.display_name) %><% if (author.avatar_url) { %><img src="<%= author.avatar_url %>" alt="" width="56" height="56" loading="lazy" decoding="async"><% } %></span>
+              <div class="creator-id">
+                <div class="creator-name-row">
+                  <% if (author.url) { %><a class="creator-name" href="<%= author.url %>"><%= author.display_name %></a><% } else { %><span class="creator-name"><%= author.display_name %></span><% } %>
+                  <span class="role-badge role-<%= author.role_key || 'creator' %>"><%= t('role.' + (author.role_key || 'creator')) %></span>
+                </div>
+                <div class="creator-sub"><%= tn('creator.count', author.creations) %></div>
+              </div>
+            </div>
+            <% if (author.bio) { %><p class="creator-bio"><%= author.bio %></p><% } %>
+            <% if (author.socials && author.socials.length) { %>
+              <div class="socials"><% author.socials.forEach(function (s) { %><a class="pill" href="<%= s.url %>" target="_blank" rel="noopener noreferrer nofollow"><%= s.label %></a><% }) %></div>
+            <% } %>
+            <% if (author.url) { %><p style="margin-top:14px"><a class="pill accent" href="<%= author.url %>"><%= t('creator.view') %></a></p><% } %>
+          </section>
+
+          <% if (related.length) { %>
+            <section class="block">
+              <h2><%= t('game.related.title') %></h2>
+              <div class="related">
+                <% related.forEach(function (g) { %>
+                  <div class="rel-row glass">
+                    <img src="<%= g.icon_url %>" alt="" width="56" height="56" loading="lazy">
+                    <div>
+                      <div class="rel-title"><a href="/jeu/<%= g.id %>"><%= g.titre %></a></div>
+                      <div class="rel-meta">v<%= g.version %> · <%= g.size %> · <%= fmtDate(g.updated_at) %></div>
+                    </div>
+                    <span class="pill accent"><%= t('type.' + g.resource_type) %></span>
+                  </div>
+                <% }) %>
+              </div>
+            </section>
+          <% } %>
+
+          <% if (changelog.length) { %>
+            <section class="block">
+              <h2><%= t('game.changelog') %><% if (game.recently_updated) { %> <span class="pill accent"><%= t('card.updated') %></span><% } %></h2>
+              <p class="creator-sub" style="margin:-6px 0 18px"><%= t('game.updated', { date: fmtDate(game.updated_at) }) %></p>
+              <ol class="timeline">
+                <% changelog.forEach(function (c) { %>
+                  <li class="tl-item">
+                    <span class="pill accent tl-version">v<%= c.version %></span>
+                    <div class="tl-body">
+                      <div class="tl-date"><%= c.date ? fmtDate(c.date) : '' %></div>
+                      <p class="tl-notes"><%= c.notes %></p>
+                    </div>
+                  </li>
+                <% }) %>
+              </ol>
+            </section>
+          <% } %>
+
+          <section class="block cmt" id="comments">
+            <h2><%= t('cmt.title') %> <span class="pill"><%= community.count %></span></h2>
+            <% if (me) { %>
+              <form class="cmt-form glass" id="cmt-form">
+                <label class="sr-only" for="cmt-text"><%= t('cmt.placeholder') %></label>
+                <textarea id="cmt-text" class="input" maxlength="600" rows="3" placeholder="<%= t('cmt.placeholder') %>" required></textarea>
+                <div class="cmt-foot"><span class="fwc-msg" id="cmt-msg" role="status" aria-live="polite"></span><button class="btn small" type="submit"><%= t('cmt.send') %></button></div>
+              </form>
+            <% } else { %>
+              <p class="cmt-login glass"><a href="/auth/discord?next=<%= encodeURIComponent(currentPath) %>"><%= t('cmt.login') %></a></p>
+            <% } %>
+            <div class="cmt-list">
+              <% if (!community.comments.length) { %><p class="creator-sub"><%= t('cmt.empty') %></p><% } %>
+              <% community.comments.forEach(function (c) { %>
+                <article class="cmt-item glass" id="c-<%= c.id %>">
+                  <span class="avatar" style="--size:38px;font-size:13px"><%= initials(c.username) %><% if (c.avatar_url) { %><img src="<%= c.avatar_url %>" alt="" width="38" height="38" loading="lazy"><% } %></span>
+                  <div class="cmt-main">
+                    <div class="cmt-head">
+                      <% if (c.profile) { %><a class="cmt-name" href="<%= c.profile %>"><%= c.username %></a><% } else { %><span class="cmt-name"><%= c.username %></span><% } %>
+                      <%- include('partials/badges', { list: c.badges }) %>
+                      <% if (c.verified) { %><span class="pill verified" title="<%= t('cmt.verified_hint') %>"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2.5 7.5 3 3 6-6.5"/></svg><%= t('cmt.verified') %></span><% } %>
+                      <time class="cmt-date" datetime="<%= c.created_at %>"><%= fmtDate(c.created_at) %></time>
+                      <% if (c.canDelete) { %><button type="button" class="cmt-del" data-del="<%= c.id %>"><%= t('cmt.delete') %></button><% } %>
+                    </div>
+                    <p class="cmt-text"><%= c.content %></p>
+                  </div>
+                </article>
+              <% }) %>
+            </div>
+          </section>
+
+          <% if (ytId) { %>
+            <section class="block"><h2><%= t('game.video') %></h2>
+              <div class="video">
+                <iframe src="https://www.youtube-nocookie.com/embed/<%= ytId %>?rel=0" title="<%= t('game.video_of', { title: game.titre }) %>" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+              </div>
+            </section>
+          <% } %>
+
+          <% if (game.screenshots && game.screenshots.length) { %>
+            <section class="block"><h2><%= t('game.screens') %></h2>
+              <div class="gallery" id="gallery">
+                <% game.screenshots.forEach(function (src, i) { %>
+                  <button class="shot" type="button" data-index="<%= i %>" aria-label="<%= t('game.screen_zoom', { n: i + 1 }) %>"><img src="<%= src %>" alt="<%= t('game.screen_alt', { n: i + 1, title: game.titre }) %>" loading="lazy" decoding="async"></button>
+                <% }) %>
+              </div>
+            </section>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <% if (game.screenshots && game.screenshots.length) { %>
+    <div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="<%= t('game.screens') %>">
+      <button class="x" type="button" id="lb-close" aria-label="<%= t('common.close') %>"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m3 3 12 12M15 3 3 15"/></svg></button>
+      <button class="prev" type="button" id="lb-prev" aria-label="<%= t('common.prev') %>"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3 5 9l6 6"/></svg></button>
+      <img id="lb-img" alt="">
+      <button class="next" type="button" id="lb-next" aria-label="<%= t('common.next') %>"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7 3 6 6-6 6"/></svg></button>
+      <div class="count" id="lb-count"></div>
+    </div>
+    <script type="application/json" id="shots"><%- JSON.stringify(game.screenshots).replace(/</g, '\\u003c') %></script>
+  <% } %>
+
+  <% if (me) { %>
+  <dialog class="report-dialog glass" id="report-dialog" aria-labelledby="report-title">
+    <form method="dialog" id="report-form">
+      <h2 id="report-title"><%= t('rep.title') %></h2>
+      <p class="creator-sub"><%= t('rep.sub') %></p>
+      <label class="check"><input type="radio" name="reason" value="dead" checked><span><%= t('rep.reason.dead') %></span></label>
+      <label class="check"><input type="radio" name="reason" value="corrupt"><span><%= t('rep.reason.corrupt') %></span></label>
+      <label class="check"><input type="radio" name="reason" value="region"><span><%= t('rep.reason.region') %></span></label>
+      <p class="fwc-msg" id="report-msg" role="status" aria-live="polite"></p>
+      <div class="report-foot"><button class="btn ghost small" type="button" id="report-cancel"><%= t('common.cancel') %></button><button class="btn small" type="submit" id="report-send"><%= t('rep.send') %></button></div>
+    </form>
+  </dialog>
+  <% } %>
+
+  <%- include('partials/foot') %>
+  <script>
+    (function () {
+      'use strict';
+      var meta = document.querySelector('meta[name="csrf-token"]');
+      var token = meta ? meta.getAttribute('content') : '';
+      var gid = <%- JSON.stringify(game.id) %>;
+      var ERR = <%- JSON.stringify(t('common.error')) %>;
+      function call(method, url, body) {
+        return fetch(url, { method: method, credentials: 'same-origin', headers: { 'X-CSRF-Token': token, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+          .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); });
+      }
+      function login() { location.href = '/auth/discord?next=' + encodeURIComponent(location.pathname); }
+      function plural(el, n) { return (n < 2 ? el.dataset.one : el.dataset.other).replace('{n}', n); }
+
+      var voteBox = document.getElementById('fwc-vote'), msg = document.getElementById('fwc-msg');
+      if (voteBox) voteBox.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-fw-vote]'); if (!b) return;
+        if (!token) { login(); return; }
+        b.disabled = true;
+        call('POST', '/api/games/' + gid + '/fw-vote', { value: b.dataset.fwVote }).then(function (res) {
+          if (res.status === 401) { login(); return; }
+          if (!res.ok) { msg.textContent = res.data.erreur || ERR; return; }
+          msg.textContent = '';
+          Array.prototype.forEach.call(voteBox.querySelectorAll('[data-fw-vote]'), function (x) { var on = x.dataset.fwVote === res.data.mine; x.classList.toggle('is-on', on); x.setAttribute('aria-pressed', String(on)); });
+          res.data.stats.fw.forEach(function (f) {
+            var row = document.querySelector('[data-fw-row="' + f.key + '"]'); if (!row) return;
+            var bar = row.querySelector('.fwc-bar'); bar.setAttribute('aria-valuenow', f.pct === null ? 0 : f.pct); bar.firstElementChild.style.width = (f.pct === null ? 0 : f.pct) + '%';
+            row.querySelector('.fwc-pct').textContent = f.pct === null ? '—' : f.pct + '%';
+            var n = row.querySelector('.fwc-n'); n.textContent = plural(n, f.votes);
+          });
+          var iss = document.getElementById('fwc-issues'); iss.textContent = plural(iss, res.data.stats.issue);
+        }).catch(function () { msg.textContent = ERR; }).then(function () { b.disabled = false; });
+      });
+
+      var rd = document.getElementById('report-dialog'), ro = document.getElementById('report-open');
+      if (rd && ro) {
+        var rm = document.getElementById('report-msg'), rs = document.getElementById('report-send');
+        ro.addEventListener('click', function () { rm.textContent = ''; rm.style.color = ''; if (rd.showModal) rd.showModal(); else rd.setAttribute('open', ''); });
+        document.getElementById('report-cancel').addEventListener('click', function () { rd.close(); });
+        document.getElementById('report-form').addEventListener('submit', function (e) {
+          e.preventDefault();
+          var reason = document.querySelector('#report-form input[name=reason]:checked').value;
+          rs.disabled = true;
+          call('POST', '/api/games/' + gid + '/report-link', { reason: reason }).then(function (res) {
+            rs.disabled = false;
+            if (!res.ok) { rm.style.color = ''; rm.textContent = res.data.erreur || ERR; if (res.status === 409) rs.disabled = true; return; }
+            rm.style.color = 'var(--ok)'; rm.textContent = <%- JSON.stringify(t('rep.thanks')) %>;
+            setTimeout(function () { rd.close(); }, 1600);
+          }).catch(function () { rs.disabled = false; rm.textContent = ERR; });
+        });
+      }
+
+      var form = document.getElementById('cmt-form');
+      if (form) form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var area = document.getElementById('cmt-text'), out = document.getElementById('cmt-msg'), btn = form.querySelector('button');
+        btn.disabled = true;
+        call('POST', '/api/games/' + gid + '/comments', { content: area.value }).then(function (res) {
+          if (res.status === 401) { login(); return; }
+          if (!res.ok) { out.textContent = res.data.erreur || ERR; btn.disabled = false; return; }
+          location.href = location.pathname + '#comments'; location.reload();
+        }).catch(function () { out.textContent = ERR; btn.disabled = false; });
+      });
+      document.addEventListener('click', function (e) {
+        var d = e.target.closest('[data-del]'); if (!d) return;
+        d.disabled = true;
+        call('DELETE', '/api/games/' + gid + '/comments/' + d.dataset.del).then(function (res) {
+          if (res.ok) { var item = document.getElementById('c-' + d.dataset.del); if (item) item.remove(); } else d.disabled = false;
+        }).catch(function () { d.disabled = false; });
+      });
+    })();
+  </script>
+  <script>
+    (function () {
+      'use strict';
+      var shotsNode = document.getElementById('shots');
+      if (!shotsNode) return;
+      var shots = JSON.parse(shotsNode.textContent);
+      var lb = document.getElementById('lb'), img = document.getElementById('lb-img'), count = document.getElementById('lb-count');
+      var index = 0, opener = null;
+      lb.classList.toggle('single', shots.length < 2);
+      function show(i) { index = (i + shots.length) % shots.length; img.src = shots[index]; count.textContent = (index + 1) + ' / ' + shots.length; }
+      function open(i, from) { opener = from; show(i); lb.classList.add('is-open'); void lb.offsetWidth; lb.classList.add('is-visible'); document.body.style.overflow = 'hidden'; document.getElementById('lb-close').focus(); }
+      function close() { lb.classList.remove('is-visible'); setTimeout(function () { lb.classList.remove('is-open'); img.removeAttribute('src'); }, 350); document.body.style.overflow = ''; if (opener) opener.focus(); }
+      document.querySelectorAll('.shot').forEach(function (b) { b.addEventListener('click', function () { open(parseInt(b.dataset.index, 10), b); }); });
+      document.getElementById('lb-close').addEventListener('click', close);
+      document.getElementById('lb-prev').addEventListener('click', function (e) { e.stopPropagation(); show(index - 1); });
+      document.getElementById('lb-next').addEventListener('click', function (e) { e.stopPropagation(); show(index + 1); });
+      lb.addEventListener('mousedown', function (e) { if (e.target === lb) close(); });
+      document.addEventListener('keydown', function (e) {
+        if (!lb.classList.contains('is-open')) return;
+        if (e.key === 'Escape') close(); else if (e.key === 'ArrowLeft') show(index - 1); else if (e.key === 'ArrowRight') show(index + 1);
+      });
+    })();
+  </script>
+</body>
+</html>
